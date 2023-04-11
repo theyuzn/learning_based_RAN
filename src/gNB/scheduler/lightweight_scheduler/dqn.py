@@ -95,18 +95,18 @@ class DQNAgent():
 
         Parameters:
         - state
-    - epsilon: float, exploration rate
+        - epsilon: float, exploration rate
 
-    Returns:
-    - action: int, chosen action
-    """
-    if np.random.rand() < epsilon:
-        return np.random.randint(self.action_size)
-    else:
-        state = torch.FloatTensor(state).unsqueeze(0)
-        q_values = self.model(state)
-        _, action = torch.max(q_values, 1)
-        return int(action)
+        Returns:
+        - action: int, chosen action
+        """
+        if np.random.rand() < epsilon:
+            return np.random.randint(self.action_size)
+        else:
+            state = torch.FloatTensor(state).unsqueeze(0)
+            q_values = self.model(state)
+            _, action = torch.max(q_values, 1)
+            return int(action)
 
 def train(self):
     """
