@@ -1,3 +1,5 @@
+tdd_time = [1, 0, 0, 1, 1, 0, 0, 1, 1, 0]
+
 for t in range(len(tdd_time)):
     # choose an action
     epsilon = 1.0 / (episode + 1)
