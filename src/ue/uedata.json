@@ -1,0 +1,22 @@
+{
+    "UE": {
+      "ue1": {
+        "id": 1,
+        "sizeByte": 500,
+        "delayms":20,
+        "type":"eMBB"
+      },
+      "ue2":{
+        "id": 2,
+        "sizeByte": 500,
+        "delayms":20,
+        "type":"URLLC"
+      },
+      "ue3":{
+        "id": 2,
+        "sizeByte": 500,
+        "delayms":20,
+        "type":"URLLC"
+      }
+    }
+  }
