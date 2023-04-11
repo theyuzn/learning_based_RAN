@@ -3,6 +3,96 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import random
+import argparse
+import logging
+
+# Training
+BATCH_SIZE = 32
+
+# Replay Memory
+REPLAY_MEMORY = 50000
+
+# Epsilon
+EPSILON_START = 1.0
+EPSILON_END = 0.01
+EPSILON_DECAY = 100000
+
+# LSTM Memory
+LSTM_MEMORY = 128
+
+# ETC Options
+TARGET_UPDATE_INTERVAL = 1000
+CHECKPOINT_INTERVAL = 5000
+PLAY_INTERVAL = 900
+PLAY_REPEAT = 1
+LEARNING_RATE = 0.0001
+
+parser = argparse.ArgumentParser(description='DQN Configuration')
+parser.add_argument('--model', default='dqn', type=str, help='forcefully set step')
+parser.add_argument('--step', default=None, type=int, help='forcefully set step')
+parser.add_argument('--best', default=None, type=int, help='forcefully set best')
+parser.add_argument('--load_latest', dest='load_latest', action='store_true', help='load latest checkpoint')
+parser.add_argument('--no_load_latest', dest='load_latest', action='store_false', help='train from the scrach')
+parser.add_argument('--checkpoint', default=None, type=str, help='specify the checkpoint file name')
+parser.add_argument('--mode', dest='mode', default='play', type=str, help='[play, train]')
+parser.add_argument('--game', default='FlappyBird-v0', type=str, help='only Pygames are supported')
+parser.add_argument('--clip', dest='clip', action='store_true', help='clipping the delta between -1 and 1')
+parser.add_argument('--noclip', dest='clip', action='store_false', help='not clipping the delta')
+parser.add_argument('--skip_action', default=4, type=int, help='Skipping actions')
+parser.add_argument('--record', dest='record', action='store_true', help='Record playing a game')
+parser.add_argument('--inspect', dest='inspect', action='store_true', help='Inspect CNN')
+parser.add_argument('--seed', default=111, type=int, help='random seed')
+parser.set_defaults(clip=True, load_latest=True, record=False, inspect=False)
+parser: argparse.Namespace = parser.parse_args()
+
+# Random Seed
+torch.manual_seed(parser.seed)
+torch.cuda.manual_seed(parser.seed)
+np.random.seed(parser.seed)
+
+# Logging
+logger = logging.getLogger('DQN')
+logger.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(message)s')
+
+file_handler = logging.FileHandler(f'dqn_{parser.model}.log')
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
+class ReplayMemory(object):
+    def __init__(self, capacity=REPLAY_MEMORY):
+        self.capacity = capacity
+        self.memory = deque(maxlen=self.capacity)
+        self.Transition = namedtuple('Transition', ('state', 'action', 'reward', 'next_state'))
+        self._available = False
+
+    def put(self, state: np.array, action: torch.LongTensor, reward: np.array, next_state: np.array):
+        """
+        저장시 모두 Torch Tensor로 변경해준다음에 저장을 합니다.
+        action은 select_action()함수에서부터 LongTensor로 리턴해주기 때문에,
+        여기서 변경해줄필요는 없음
+        """
+        state = torch.FloatTensor(state)
+        reward = torch.FloatTensor([reward])
+        if next_state is not None:
+            next_state = torch.FloatTensor(next_state)
+        transition = self.Transition(state=state, action=action, reward=reward, next_state=next_state)
+        self.memory.append(transition)
+
+    def sample(self, batch_size):
+        transitions = sample(self.memory, batch_size)
+        return self.Transition(*(zip(*transitions)))
+
+    def size(self):
+        return len(self.memory)
+
+    def is_available(self):
+        if self._available:
+            return True
+
+        if len(self.memory) > BATCH_SIZE:
+            self._available = True
+        return self._available
 
 class DQN(nn.Module):
     def __init__(self, state_size, action_size):
