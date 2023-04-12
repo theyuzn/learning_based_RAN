@@ -1,10 +1,6 @@
 import argparse
-import json
-import os
 
-from envs.ue import UE
-import utils.constant as CONST
-
+from  multiagent_dqn.envs.env import Env
 
 parser = argparse.ArgumentParser(description='DQN Configuration')
 parser.add_argument('--no_load_latest', dest='load_latest', action='store_false', help='train from the scrach')
@@ -21,24 +17,8 @@ parser.add_argument('--k2', default=4, type=int, help='k2 parameter')
 parser: argparse.Namespace = parser.parse_args()
 
 
-def decode_json(dct):
-    return  UE(id = dct[CONST.ID],
-                sizeOfData = dct[CONST.SIZE],
-                delay_bound = dct[CONST.DELAY],
-                type = dct[CONST.TYPE])
-    
-
-def main(parser):
-    uelist = []
-    cur_path = os.path.dirname(__file__)
-    new_path = os.path.join(cur_path, 'ue/uedata.json')
-
-    with open(new_path, 'r') as ue_file:
-        ue = json.load(ue_file,object_hook=decode_json) 
-        uelist.append(ue)
-
-
-  
+def main(parser: argparse.Namespace):
+    env = Env(args = parser)
 
 if __name__ == '__main__':
     main(parser)
