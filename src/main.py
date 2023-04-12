@@ -3,7 +3,9 @@ import json
 import os
 
 from ue.ue import UE
+# from gNB.scheduler.lightweight_scheduler.dqn import DQNAgent
 import utils.constant as CONST
+# from src.gNB.gNB import gNB
 
 parser = argparse.ArgumentParser(description='DQN Configuration')
 parser.add_argument('--model', default='dqn', type=str, help='forcefully set step')
@@ -25,9 +27,10 @@ parser: argparse.Namespace = parser.parse_args()
 
 
 def decode_json(dct):
-    if "id" in dct:
-        return  UE(dct[CONST.ID],dct[CONST.SIZE],dct[CONST.DELAY],dct[CONST.TYPE])
-    return
+    return  UE(id = dct[CONST.ID],
+                sizeOfData = dct[CONST.SIZE],
+                delay_bound = dct[CONST.DELAY],
+                type = dct[CONST.TYPE])
     
 
 def main(parser):
@@ -39,19 +42,10 @@ def main(parser):
         ue = json.load(ue_file,object_hook=decode_json) 
         uelist.append(ue)
 
-    # agent = Agent(parser)
-    # if parser.load_latest and not parser.checkpoint:
-    #     agent.load_latest_checkpoint()
-    # elif parser.checkpoint:
-    #     agent.load_checkpoint(parser.checkpoint)
+    # gnb = gNB(parser = parser, uelist = uelist)
+    # gnb.start()
 
-    # if parser.mode.lower() == 'play':
-    #     agent.play()
-    # elif parser.mode.lower() == 'train':
-    #     agent.train()
-    # elif parser.mode.lower() == 'inspect':
-    #     agent.inspect()
-
+  
 
 if __name__ == '__main__':
     main(parser)
