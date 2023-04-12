@@ -1,10 +1,27 @@
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import numpy as np
-import random
 import argparse
+import copy
+import glob
 import logging
+import math
+import os
+import re
+import sys
+from collections import deque
+from collections import namedtuple
+from random import random, sample
+
+import cv2
+import gym
+import gym_ple
+import numpy as np
+import pylab
+import torch
+from gym.wrappers import Monitor
+from scipy.misc import toimage
+from torch import nn, optim
+from torch.autograd import Variable
+from torch.nn import functional as F
+from torchvision import transforms as T
 
 # Training
 BATCH_SIZE = 32
@@ -67,16 +84,6 @@ class ReplayMemory(object):
         self._available = False
 
     def put(self, state: np.array, action: torch.LongTensor, reward: np.array, next_state: np.array):
-        """
-        Add an experience to the replay buffer.
-
-        Parameters:
-        - state: numpy array, state at time t
-        - action: int, action taken at time t
-        - reward: float, reward received at time t+1
-        - next_state: numpy array, state at time t+1
-        - done: boolean, indicates if episode has terminated
-        """
         state = torch.FloatTensor(state)
         reward = torch.FloatTensor([reward])
         if next_state is not None:
@@ -85,19 +92,6 @@ class ReplayMemory(object):
         self.memory.append(transition)
 
     def sample(self, batch_size):
-        """
-        Sample a batch of experiences from the replay buffer.
-
-        Parameters:
-        - batch_size: int, size of the batch to sample
-
-        Returns:
-        - state: torch tensor, tensor of states
-        - action: torch tensor, tensor of actions
-        - reward: torch tensor, tensor of rewards
-        - next_state: torch tensor, tensor of next states
-        - done: torch tensor, tensor of done flags
-        """
         transitions = sample(self.memory, batch_size)
         return self.Transition(*(zip(*transitions)))
 
@@ -117,7 +111,7 @@ class DQN(nn.Module):
         super(DQN, self).__init__()
         self.n_action = n_action
 
-        self.conv1 = nn.Conv2d(4, 32, kernel_size=8, stride=4, padding=0)  # (In Channel, Out Channel, ...)
+        self.conv1 = nn.Conv2d(4, 32, kernel_size=8, stride=4, padding=0)
         self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=0)
         self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=0)
 
@@ -142,7 +136,7 @@ class LSTMDQN(nn.Module):
         super(LSTMDQN, self).__init__()
         self.n_action = n_action
 
-        self.conv1 = nn.Conv2d(4, 32, kernel_size=8, stride=1, padding=1)  # (In Channel, Out Channel, ...)
+        self.conv1 = nn.Conv2d(4, 32, kernel_size=8, stride=1, padding=1)
         self.conv2 = nn.Conv2d(32, 64, kernel_size=5, stride=1, padding=1)
         self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
         self.conv4 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
@@ -208,9 +202,9 @@ class Environment(object):
         self.game.close()
 
     def preprocess(self, screen):
-        preprocessed: np.array = cv2.resize(screen, (self.height, self.width))  # 84 * 84 로 변경
-        preprocessed = np.dot(preprocessed[..., :3], [0.299, 0.587, 0.114])  # Gray scale 로 변경
-        # preprocessed: np.array = preprocessed.transpose((2, 0, 1))  # (C, W, H) 로 변경
+        preprocessed: np.array = cv2.resize(screen, (self.height, self.width))  
+        preprocessed = np.dot(preprocessed[..., :3], [0.299, 0.587, 0.114]) 
+        # preprocessed: np.array = preprocessed.transpose((2, 0, 1)) 
         preprocessed: np.array = preprocessed.astype('float32') / 255.
 
         return preprocessed
@@ -306,30 +300,15 @@ class DQNAgent():
         self.epsilon = EPSILON_START
 
     def select_action(self, states: np.array) -> tuple:
-         """
-            Choose an action according to the epsilon-greedy policy.
-
-            Parameters:
-            - state
-            - epsilon: float, exploration rate
-
-            Returns:
-            - action: int, chosen action
-            """
         # Decrease epsilon value
         self.epsilon = EPSILON_END + (EPSILON_START - EPSILON_END) * \
                                      math.exp(-1. * self.step / EPSILON_DECAY)
 
         if self.epsilon > random():
-            # Random Action
             sample_action = self.env.game.action_space.sample()
             action = torch.LongTensor([[sample_action]])
             return action
 
-        # max(dimension) 이 들어가며 tuple을 return값으로 내놓는다.
-        # tuple안에는 (FloatTensor, LongTensor)가 있으며
-        # FloatTensor는 가장 큰 값
-        # LongTensor에는 가장 큰 값의 index가 있다.
         states = states.reshape(1, self.action_repeat, self.env.width, self.env.height)
         states_variable: Variable = Variable(torch.FloatTensor(states).cuda())
 
@@ -360,9 +339,6 @@ class DQNAgent():
         return np.array(self._state_buffer)
 
     def train(self, gamma: float = 0.99, mode: str = 'rgb_array'):
-        """
-        Train the DQN agent on a batch of experiences from the replay buffer.
-        """
         # Initial States
         reward_sum = 0.
         q_mean = [0., 0.]
@@ -537,9 +513,6 @@ class DQNAgent():
         return loss.data.cpu().numpy(), reward_score, q_mean, target_mean
 
     def _target_update(self):
-         """
-        Update the target Q-network with the current Q-network.
-        """
         self.target = copy.deepcopy(self.dqn)
 
     def save_checkpoint(self, filename='dqn_checkpoints/checkpoint.pth.tar'):
