@@ -1,24 +1,4 @@
-{
-    "UEs": [
-      {
-          "id": 1,
-          "sizeByte": 500,
-          "delayms":20,
-          "type":"eMBB"
-      },
-
-      {
-        "id": 2,
-        "sizeByte": 500,
-        "delayms":20,
-        "type":"URLLC"
-      },
-
-      {
-        "id": 3,
-        "sizeByte": 500,
-        "delayms":20,
-        "type":"URLLC"
-      }
-    ]
-  }
+[
+      { "id": 1, "sizebyte": 5000, "delayms":20, "type":"eMBB"},
+      { "id": 2, "sizebyte": 5000, "delayms":20, "type":"eMBB"}
+]

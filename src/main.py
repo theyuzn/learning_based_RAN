@@ -1,7 +1,9 @@
 import argparse
 import json
 import os
-import ue.ue as UE
+
+from ue.ue import UE
+import utils.constant as CONST
 
 parser = argparse.ArgumentParser(description='DQN Configuration')
 parser.add_argument('--model', default='dqn', type=str, help='forcefully set step')
@@ -23,30 +25,19 @@ parser: argparse.Namespace = parser.parse_args()
 
 
 def decode_json(dct):
-    # "id": 1,
-    #       "sizeByte": 500,
-    #       "delayms":20,
-    #       "type":"eMBB"
-    # uelist = []
-    # if "id" in dct:
-    #     uelist.append(UE(1,1,1,1))
-    # return uelist
-        
-       
-    return 
+    if "id" in dct:
+        return  UE(dct[CONST.ID],dct[CONST.SIZE],dct[CONST.DELAY],dct[CONST.TYPE])
+    return
+    
 
 def main(parser):
     uelist = []
-    uelist.append(UE(1,1,1,1))
-    print(uelist)
     cur_path = os.path.dirname(__file__)
-    print(cur_path)
     new_path = os.path.join(cur_path, 'ue/uedata.json')
-    print(new_path)
-    with open(new_path, 'r') as ue_file:
-        uelist = json.load(ue_file,object_hook=decode_json)
-        print(uelist)
 
+    with open(new_path, 'r') as ue_file:
+        ue = json.load(ue_file,object_hook=decode_json) 
+        uelist.append(ue)
 
     # agent = Agent(parser)
     # if parser.load_latest and not parser.checkpoint:
