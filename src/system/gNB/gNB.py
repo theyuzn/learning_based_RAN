@@ -1,6 +1,6 @@
 import argparse
 
-from ue.ue import UE
+from li_sche.envs.ue import UE
 from scheduler.lightweight_scheduler.dqn import DQNAgent 
 
 simulation_frame    = 200 # 20 seconds
