@@ -1,0 +1,1 @@
+from gym_gNB.envs.gym_gNB import gym_gNB

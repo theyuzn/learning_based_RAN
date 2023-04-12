@@ -6,6 +6,8 @@ from ue.ue import UE
 # from gNB.scheduler.lightweight_scheduler.dqn import DQNAgent
 import utils.constant as CONST
 # from src.gNB.gNB import gNB
+from random import random, sample
+
 
 parser = argparse.ArgumentParser(description='DQN Configuration')
 parser.add_argument('--model', default='dqn', type=str, help='forcefully set step')
@@ -41,6 +43,9 @@ def main(parser):
     with open(new_path, 'r') as ue_file:
         ue = json.load(ue_file,object_hook=decode_json) 
         uelist.append(ue)
+
+
+    print(random())
 
     # gnb = gNB(parser = parser, uelist = uelist)
     # gnb.start()

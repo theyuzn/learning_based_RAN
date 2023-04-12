@@ -131,6 +131,9 @@ class action_space:
     grouping_result : dict      # The dictionary {'Sche': list(UE)1, 'Group1': list(UE)2, ...}
     n = 4
 
+    def sample(state):
+        return
+
 class DQNAgent():
     # Init
     def __init__(self, args: argparse.Namespace, cuda = True, action_repeat: int = 4, uelist = []):
@@ -198,28 +201,28 @@ class DQNAgent():
         # Epsilon
         self.epsilon = EPSILON_START
 
-    # def select_action(self, states: np.array) -> tuple:
-    #     # Decrease epsilon value
-    #     self.epsilon = EPSILON_END + (EPSILON_START - EPSILON_END) * \
-    #                                  math.exp(-1. * self.step / EPSILON_DECAY)
+    def select_action(self, states: np.array) -> tuple:
+        # Decrease epsilon value
+        self.epsilon = EPSILON_END + (EPSILON_START - EPSILON_END) * \
+                                     math.exp(-1. * self.step / EPSILON_DECAY)
 
-    #     if self.epsilon > random():
-    #         sample_action = self.env.game.action_space.sample()
-    #         action = torch.LongTensor([[sample_action]])
-    #         return action
+        if self.epsilon > random():
+            sample_action = self.env.game.action_space.sample()
+            action = torch.LongTensor([[sample_action]])
+            return action
 
-    #     states = states.reshape(1, self.action_repeat, self.env.width, self.env.height)
-    #     states_variable: Variable = Variable(torch.FloatTensor(states).cuda())
+        states = states.reshape(1, self.action_repeat, self.env.width, self.env.height)
+        states_variable: Variable = Variable(torch.FloatTensor(states).cuda())
 
-    #     if self.mode == 'dqn':
-    #         states_variable.volatile = True
-    #         action = self.dqn(states_variable).data.cpu().max(1)[1]
-    #     elif self.mode == 'lstm':
-    #         action, self.dqn_hidden_state, self.dqn_cell_state = \
-    #             self.dqn(states_variable, self.train_hidden_state, self.train_cell_state)
-    #         action = action.data.cpu().max(1)[1]
+        if self.mode == 'dqn':
+            states_variable.volatile = True
+            action = self.dqn(states_variable).data.cpu().max(1)[1]
+        elif self.mode == 'lstm':
+            action, self.dqn_hidden_state, self.dqn_cell_state = \
+                self.dqn(states_variable, self.train_hidden_state, self.train_cell_state)
+            action = action.data.cpu().max(1)[1]
 
-    #     return action
+        return action
 
     # def get_initial_states(self):
     #     state = self.env.reset()
@@ -430,28 +433,28 @@ class DQNAgent():
     #     }
     #     torch.save(checkpoint, filename)
 
-    # def load_checkpoint(self, filename='dqn_checkpoints/checkpoint.pth.tar', epsilon=None):
-    #     checkpoint = torch.load(filename)
-    #     self.dqn.load_state_dict(checkpoint['dqn'])
-    #     self.target.load_state_dict(checkpoint['target'])
-    #     self.optimizer.load_state_dict(checkpoint['optimizer'])
-    #     self.step = checkpoint['step']
-    #     self.best_score = self.best_score or checkpoint['best']
-    #     self.best_count = checkpoint['best_count']
+    def load_checkpoint(self, filename='dqn_checkpoints/checkpoint.pth.tar', epsilon=None):
+        checkpoint = torch.load(filename)
+        self.dqn.load_state_dict(checkpoint['dqn'])
+        self.target.load_state_dict(checkpoint['target'])
+        self.optimizer.load_state_dict(checkpoint['optimizer'])
+        self.step = checkpoint['step']
+        self.best_score = self.best_score or checkpoint['best']
+        self.best_count = checkpoint['best_count']
 
-    # def load_latest_checkpoint(self, epsilon=None):
-    #     r = re.compile('chkpoint_(dqn|lstm)_(?P<number>-?\d+)\.pth\.tar$')
+    def load_latest_checkpoint(self, epsilon=None):
+        r = re.compile('chkpoint_(dqn|lstm)_(?P<number>-?\d+)\.pth\.tar$')
 
-    #     files = glob.glob(f'dqn_checkpoints/chkpoint_{self.mode}_*.pth.tar')
+        files = glob.glob(f'dqn_checkpoints/chkpoint_{self.mode}_*.pth.tar')
 
-    #     if files:
-    #         files = list(map(lambda x: [int(r.search(x).group('number')), x], files))
-    #         files = sorted(files, key=lambda x: x[0])
-    #         latest_file = files[-1][1]
-    #         self.load_checkpoint(latest_file, epsilon=epsilon)
-    #         print(f'latest checkpoint has been loaded - {latest_file}')
-    #     else:
-    #         print('no latest checkpoint')
+        if files:
+            files = list(map(lambda x: [int(r.search(x).group('number')), x], files))
+            files = sorted(files, key=lambda x: x[0])
+            latest_file = files[-1][1]
+            self.load_checkpoint(latest_file, epsilon=epsilon)
+            print(f'latest checkpoint has been loaded - {latest_file}')
+        else:
+            print('no latest checkpoint')
 
     # def play(self, logging=True, human=True):
     #     observation = self.env.game.reset()
