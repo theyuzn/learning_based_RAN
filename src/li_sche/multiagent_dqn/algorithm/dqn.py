@@ -5,6 +5,8 @@ from torch.autograd import Variable
 from torch.nn import functional as F
 from collections import deque
 from collections import namedtuple
+from random import random, sample
+
 
 from .constant import *
 

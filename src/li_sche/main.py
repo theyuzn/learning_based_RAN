@@ -19,6 +19,7 @@ parser: argparse.Namespace = parser.parse_args()
 
 def main(parser: argparse.Namespace):
     env = Env(args = parser)
+    env.init()
 
 if __name__ == '__main__':
     main(parser)

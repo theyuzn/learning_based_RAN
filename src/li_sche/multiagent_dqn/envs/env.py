@@ -9,6 +9,12 @@ from ..agent.action_space import *
 SLOT_PATTERN1 = ['D','D','S','U','U']
 PATTERN_P1 = 5
 
+def decode_json(dct):
+    return  UE(id = dct[ID],
+               sizeOfData = dct[SIZE],
+               delay_bound = dct[DELAY],
+               type = dct[TYPE])
+
 class RAN_config:
     def __init__(self, 
                  BW         = 40, 
@@ -29,7 +35,8 @@ class RAN_config:
         self.pattern_p      = pattern_p
 
 
-
+MAX_GROUP = 4
+ 
 class RAN_system:
     def __init__(self, args : argparse.Namespace):
         self.slot = 0
@@ -42,25 +49,16 @@ class RAN_system:
                                      k1 = self.args.k1,
                                      k2 = self.args.k2,
                                      )
-
-    @property
-    def _decode_json(dct):
-        return  UE(id = dct[ID],
-                sizeOfData = dct[SIZE],
-                delay_bound = dct[DELAY],
-                type = dct[TYPE])    
     
     def init(self):
         self.slot = 0
         self.uelist = []
-        self.collision = 0
+        self.collision = [None]*MAX_GROUP
         cur_path = os.path.dirname(__file__)
-        new_path = os.path.join(cur_path, 'ue/uedata.json')
+        new_path = os.path.join(cur_path, '../../../data/uedata.json')
 
         with open(new_path, 'r') as ue_file:
-            ue = json.load(ue_file,object_hook=self._decode_json) 
-            self.uelist.append(ue)
-        print(self.uelist)
+            self.uelist = json.load(ue_file,object_hook=decode_json) 
 
 
     def reset(self):
@@ -82,6 +80,7 @@ class Env:
             
     # return {ul_uelist, collision}
     def init(self):
+        observation = self.ran_system.reset()
         return self.ran_system.reset()
 
     def step(self, 
@@ -95,6 +94,5 @@ class Env:
         """
         :return: observation array
         """
-        observation = self.game.reset()
-        observation = self.preprocess(observation)
+        observation = self.ran_system.reset()
         return observation
