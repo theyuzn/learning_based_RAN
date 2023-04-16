@@ -14,7 +14,13 @@
 
 ## How to build
 
+
 ## Execute
+
+```sh
+# Run docker
+sudo docker run --mount type=bind,source=/home/yz/research/docker/li_sche_pytorch,target=/workspace -it --gpus --name li_sche_pyt ubuntu:jammy-20230308 bash
+```
 
 ## Credit
 

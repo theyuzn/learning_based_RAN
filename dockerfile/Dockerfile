@@ -10,7 +10,5 @@ RUN pip3 install torch torchvision torchaudio --index-url https://download.pytor
 RUN pip3 install matplotlib
 RUN pip3 install scipy numpy gym
 
-RUN cd /src
-
 
 # RUN git clone git@github.com:theyuzn/li_sche_pytorch.git

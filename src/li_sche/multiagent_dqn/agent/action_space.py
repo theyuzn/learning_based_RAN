@@ -8,7 +8,7 @@ There are four action spaces
 
 from ..envs.ue import UE
 
-# Decide the number of group 
+# Decide the number of group [1 ~ MAX_GROUP]
 class grouping_action_space:
     def __init__(self, action = -1, n = -1):
         self.action = action
@@ -17,11 +17,9 @@ class grouping_action_space:
     def set_action(self, decision):
         self.action = decision
     
-    @property
     def get_action(self):
         return self.action
     
-    @property
     def get_dimension(self):
         return self.n
 
@@ -35,11 +33,9 @@ class rb_action_space:
     def set_action(self, decision):
         self.action = decision
 
-    @property
     def get_action(self):
         return self.action
     
-    @property
     def get_dimension(self):
         return self.n
     
@@ -52,11 +48,9 @@ class ue_action_space:
     def set_action(self, decision):
         self.action = decision
 
-    @property
     def get_action(self):
         return self.action
     
-    @property
     def get_dimension(self):
         return self.n
     
@@ -69,11 +63,9 @@ class mcs_action_space:
     def set_action(self, decision):
         self.action = decision
 
-    @property
     def get_action(self):
         return self.action
     
-    @property
     def get_dimension(self):
         return self.n
     

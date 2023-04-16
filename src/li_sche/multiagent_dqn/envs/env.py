@@ -7,8 +7,15 @@ from .constant import *
 from ..agent.action_space import *
 import random
 
-SLOT_PATTERN1 = ['D','D','S','U','U']
-PATTERN_P1 = 5
+## Constant
+SLOT_PATTERN1       = ['D','D','S','U','U']
+PATTERN_P1          = 5
+SIMULATION_FRAME    = 200
+NUMBER_OF_SUBFRAME  = 10
+MAX_UPLINK_GRANT    = 124
+MAX_GROUP           = 4
+
+
 ## The global variable to store all the UE info in system ##
 UE_list = []
 
@@ -38,7 +45,6 @@ class RAN_config:
         self.pattern_p      = pattern_p
 
 
-MAX_GROUP = 4
 
 
 class state :
@@ -90,25 +96,49 @@ class RAN_system:
         return self.state
 
     def reward(self, 
+               slot_information,
                size_of_recv : int = 0, 
-               size_of_exp : int = 0, 
-               collision_list = [None]*MAX_GROUP, 
-               success_list = [None]*MAX_GROUP):
+               size_of_exp : int = 0):
+        
+        reward = 0
+        weight_recv = 1
+        weight_exp = 0.8
         collision_weight = [1,1,1,1]
         success_weight = [1,1,1,1]
+
+        if slot_information == 'D' or slot_information == 'S':
+            return 0
+        else :
+            reward = (weight_recv * size_of_recv) - (weight_exp * size_of_exp)
+        
+        return reward
 
 
 
     def reset(self):
         return self.init()
     
+    def send_DCI(self):
+        return 
+    
 
     # return S(t+1)
     def step(self, group_list : list):
-        slot = slot + 1
         next_state = state()
         success_ul_uelist = list()
         failed_ul_uelist = list()
+        slot_information = self.ran_config.slot_pattern[self.slot % self.ran_config.pattern_p]
+
+        # match self.ran_config.slot_pattern[self.slot % self.ran_config.pattern_p] :
+        #     case 'D':
+        #         self.slot_type = 'D'
+        #     case 'U':
+        #         self.slot_type = 'S'
+        #     case 'S':
+        #         self.slot_type = 'D'
+
+        exp_RB = 0
+        recvd_RB = 0
 
         # Each UE in each group will randomly select a shared RB
         for i in range(len(group_list)):
@@ -116,12 +146,17 @@ class RAN_system:
             nrofRB : int = group.get_RB()
             ul_uelist = group.get_ul_uelist
 
-            # Randomly select
+
             rb_map = dict()
             for j in range(len(ul_uelist)) :
+
+                # To calculate the expoected RB
+                ue : UE = ul_uelist[j]
+                exp_RB = exp_RB + ue.nrofRB
+
+                # Each UE select a RB to transmit
                 rb_id = random.randrange(nrofRB) + 1
                 ul_uelist[j].set_RB_ID(rb_id)
-
                 if rb_id in rb_map:
                     rb_map[rb_id].append(ul_uelist[j])
                 else:
@@ -141,12 +176,29 @@ class RAN_system:
                     
                 else :
                     continue
-            
-                
-            
 
+        # Calculate the reward
+        success_ul_ue : UE
+        for success_ul_ue in success_ul_uelist:
+            recvd_RB = recvd_RB + success_ul_ue.nrofRB
 
+        reward = self.reward(slot_information = slot_information, size_of_recv = recvd_RB, size_of_exp=exp_RB, collision_list=failed_ul_uelist, success_list=success_ul_uelist)
+
+        
+        # The done condition
+        global UE_list
+        if self.flow >= SIMULATION_FRAME * NUMBER_OF_SUBFRAME* pow(2, self.ran_config.numerology):
+            done = True
+
+        if len(UE_list) == 0:
+            done = True
+            
+                 
+        ## Update the next round 
+        self.slot = self.slot + 1
         done = False
+
+        return next_state, reward, done, slot_information
 
         
         
@@ -164,8 +216,8 @@ class Env:
         return 
 
     def step(self, group_list : list):
-        observation, reward, done = self.ran_system.step(group_list)
-        return observation, reward, done
+        observation, reward, done, information = self.ran_system.step(group_list)
+        return observation, reward, done, information
 
     def reset(self):
         """
