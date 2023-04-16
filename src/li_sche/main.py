@@ -1,6 +1,6 @@
 import argparse
 
-from  multiagent_dqn.envs.env import Env
+from multiagent_dqn.envs.env import Env
 
 parser = argparse.ArgumentParser(description='DQN Configuration')
 parser.add_argument('--no_load_latest', dest='load_latest', action='store_false', help='train from the scrach')
@@ -20,6 +20,7 @@ parser: argparse.Namespace = parser.parse_args()
 def main(parser: argparse.Namespace):
     env = Env(args = parser)
     env.init()
+
 
 if __name__ == '__main__':
     main(parser)

@@ -6,6 +6,7 @@ There are four action spaces
     4. For each group, decide MCS index {1 ~ 27} --> 27-dimension
 '''
 
+from ..envs.ue import UE
 
 # Decide the number of group 
 class grouping_action_space:
@@ -75,3 +76,36 @@ class mcs_action_space:
     @property
     def get_dimension(self):
         return self.n
+    
+
+class Gorup_result:
+    def __init__(self, group_id = 0,ul_uelist = [], nrofRB = 0, mcs = 10):
+        self.group_id = group_id
+        self.ul_uelist = ul_uelist
+        self.nrofRB = nrofRB
+        self.mcs = mcs
+
+    def add_UE(self, ue : UE):
+        self.ul_uelist.appen(ue)
+
+    def set_mcs(self, mcs : int):
+        self.mcs = mcs
+
+    def set_RB(self, nrofRB):
+        self.nrofRB = nrofRB
+
+    @property
+    def get_id(self):
+        return self.group_id
+
+    @property
+    def get_ul_uelist(self):
+        return self.ul_uelist
+    
+    @property
+    def get_RB(self):
+        return self.nrofRB
+    
+    @property
+    def get_mcs(self):
+        return self.mcs
