@@ -14,6 +14,12 @@
 
 ## How to build
 
+* Build docker file
+```sh=
+cd [where you clone]/dockerfile
+sudo docker build -t li_sche_pyt . --no-cache
+```
+
 
 ## Execute
 
