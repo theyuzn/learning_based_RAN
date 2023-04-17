@@ -22,7 +22,7 @@ from torchvision import transforms as T
 
 
 from ..envs.env import Env
-from ..algorithm.algorithm import *
+from ..algorithm.net import *
 from ..algorithm.constant import *
 from .group_agent import GroupAgent
 from .rb_action import RBAction
@@ -31,22 +31,19 @@ from .ue_action import UEAgent
 class Brain():
     # Init
     def __init__(self, args: argparse.Namespace, cuda = True, action_repeat: int = 4):
-        
 
         # Environment
         self.env = Env(args=args)
 
         # Agents
         self.grouping_action = GroupAgent(args=args)
-        self.rb_action = RBAction(args=args)
-        self.ue_action = UEAgent(args=args)
+        # self.rb_action = RBAction(args=args)
+        # self.ue_action = UEAgent(args=args)
 
 
     def get_initial_states(self):
         state = self.env.reset()
-        state = self.env.get_screen()
         states = np.stack([state for _ in range(self.action_repeat)], axis=0)
-
         self._state_buffer = deque(maxlen=self.action_repeat)
         for _ in range(self.action_repeat):
             self._state_buffer.append(state)
@@ -58,7 +55,9 @@ class Brain():
     def recent_states(self):
         return np.array(self._state_buffer)
 
-    def train(self, gamma: float = 0.99, mode: str = 'rgb_array'):
+
+    ############# Train #############
+    def train(self, gamma: float = 0.99):
         # Initial States
         reward_sum = 0.
         q_mean = [0., 0.]
@@ -73,18 +72,17 @@ class Brain():
 
             states = self.get_initial_states()
             losses = []
-            checkpoint_flag = False
             target_update_flag = False
             play_flag = False
             play_steps = 0
             real_play_count = 0
             real_score = 0
-
             reward = 0
             done = False
+
             while True:
                 # Get Action
-                action: torch.LongTensor = self.select_action(states)
+                grouping_action: torch.LongTensor = self.grouping_action.select_action(states)
 
                 for _ in range(self.frame_skipping):
                     # step 에서 나온 observation은 버림
@@ -122,10 +120,6 @@ class Brain():
                     self._target_update()
                     target_update_flag = True
 
-                # Checkpoint
-                # if self.step % CHECKPOINT_INTERVAL == 0:
-                #     self.save_checkpoint(filename=f'dqn_checkpoints/chkpoint_{self.mode}_{self.step}.pth.tar')
-                #     checkpoint_flag = True
 
                 # Play
                 if self.step % PLAY_INTERVAL == 0:

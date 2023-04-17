@@ -13,17 +13,18 @@ import pylab
 import torch
 from PIL import Image
 from torch import nn, optim
-from torch.autograd import Variable
 from torch.nn import functional as F
 from torchvision import transforms as T
 
-from ..algorithm.algorithm import DQN, LSTMDQN, ReplayMemory
+from ..algorithm.net import Decide_Grouping, LSTMDQN, ReplayMemory
 from .action_space import grouping_action_space
 from ..utils.constants import *
 from ..envs.env import MAX_GROUP, state
+from ..envs.ue import UE
 
 
 class GroupAgent:
+
     def __init__(self, args: argparse.Namespace, cuda = True, action_repeat: int = 4):
         self.args = args
         self.clip: bool = args.clip
@@ -37,59 +38,106 @@ class GroupAgent:
         self._play_steps = deque(maxlen=5)
 
         # torch init
-        # Random Seed
         torch.manual_seed(args.seed)
         torch.cuda.manual_seed(args.seed)
         np.random.seed(args.seed)
 
         # Log
-        self.logger = logging.getLogger('DQN')
+        self.log_file = "grouping"
+        self.logger = logging.getLogger('Grouping')
         self.logger.setLevel(logging.DEBUG)
         self.formatter = logging.Formatter('%(message)s')
-
-        file_handler = logging.FileHandler(f'dqn_{args.model}.log')
+        file_handler = logging.FileHandler(f'dqn_{self.log_file}_{args.model}.log')
         file_handler.setFormatter(self.formatter)
         self.logger.addHandler(file_handler)
 
         # Action apace
         self.action_space = grouping_action_space(action = -1, n = MAX_GROUP)
 
-
         # DQN Model
         self.dqn_hidden_state = self.dqn_cell_state = None
         self.target_hidden_state = self.target_cell_state = None
-
         self.mode: str = args.model.lower()
         if self.mode == 'dqn':
-            self.dqn: DQN = DQN(self.action_space.get_dimension())
+            self.net: Decide_Grouping = Decide_Grouping(self.action_space.get_dimension())
         elif self.mode == 'lstm':
-            self.dqn: LSTMDQN = LSTMDQN(self.action_space.get_dimension())
+            self.net: LSTMDQN = LSTMDQN(self.action_space.get_dimension())
 
             # For Optimization
-            self.dqn_hidden_state, self.dqn_cell_state = self.dqn.init_states()
-            self.target_hidden_state, self.target_cell_state = self.dqn.init_states()
+            self.dqn_hidden_state, self.dqn_cell_state = self.net.init_states()
+            self.target_hidden_state, self.target_cell_state = self.net.init_states()
 
             # For Training Play
-            self.train_hidden_state, self.train_cell_state = self.dqn.init_states()
+            self.train_hidden_state, self.train_cell_state = self.net.init_states()
 
             # For Validation Play
-            self.test_hidden_state, self.test_cell_state = self.dqn.init_states()
+            self.test_hidden_state, self.test_cell_state = self.net.init_states()
 
         if cuda:
-            self.dqn.cuda()
+            self.net.cuda()
 
-        # DQN Target Model
-        self.target: DQN = copy.deepcopy(self.dqn)
-
-        # Optimizer
-        self.optimizer = optim.Adam(self.dqn.parameters(), lr=LEARNING_RATE)
-
-        # Replay Memory
+        self.target: Decide_Grouping = copy.deepcopy(self.net)
+        self.optimizer = optim.Adam(self.net.parameters(), lr=LEARNING_RATE)
         self.replay = ReplayMemory()
-
-        # Epsilon
         self.epsilon = EPSILON_START
 
+
+    def preprocessing(self, state : state):
+        STEP = 0.2
+        nrofULUE = len(state.ul_uelist)
+        state_ndarray = np.array(12)
+        data_size_ndarray = np.array(nrofULUE)
+        delay_bound_ndarray = np.array(nrofULUE)
+        ue : UE
+        i, state_idx, cnter = 0
+        step = 0.
+        total_size = 0
+
+        ### Initial all the data
+        for ue in state.ul_uelist :
+            data_size_ndarray[i] = ue.sizeOfData
+            total_size += ue.sizeOfData
+            delay_bound_ndarray[i] = ue.delay_bound
+            i += 1
+        
+        data_size_ndarray.sort(axis=None, kind='quicksort')
+        delay_bound_ndarray.sort(axis=None, kind='quicksort')
+        size_range = data_size_ndarray[nrofULUE] - data_size_ndarray[0]
+        delay_range = delay_bound_ndarray[nrofULUE] - delay_bound_ndarray[0]
+
+        state_ndarray[state_idx] = nrofULUE
+        state_idx += 1
+        state_ndarray[state_idx] = total_size
+        state_idx += 1
+
+        ### Calculate the number of UE in each step of size of data
+        i = 0
+        step = 0.
+        for i  in nrofULUE :
+            if data_size_ndarray[i]/size_range <= step and data_size_ndarray[i]/size_range > step :
+                cnter += 1
+            else:
+                state_ndarray[state_idx] = cnter
+                state_idx += 1
+                cnter = 0
+                step += STEP
+
+
+        ### Calculate the number of UE in each step of delay bound
+        i = 0
+        step = 0.
+        for i  in nrofULUE :
+            if delay_bound_ndarray[i]/delay_range <= step and delay_bound_ndarray[i]/delay_range > step :
+                cnter += 1
+            else:
+                state_ndarray[state_idx] = cnter
+                state_idx += 1
+                cnter = 0
+                step += STEP
+
+
+        ### Return the processed state array
+        return state_ndarray
 
 
 
@@ -102,15 +150,15 @@ class GroupAgent:
             sample_action = random.randrange(MAX_GROUP) + 1
             action = torch.LongTensor([[sample_action]])
             return action
-
-        states = states.reshape(1, self.action_repeat, self.env.width, self.env.height)
-        states_variable: Variable = Variable(torch.FloatTensor(states).cuda())
+        
+        state_array : np.ndarray
+        state_array = self.preprocessing(state = states)
+        state_array = torch.as_tensor(state_array)
 
         if self.mode == 'dqn':
-            states_variable.volatile = True
-            action = self.dqn(states_variable).data.cpu().max(1)[1]
+            action = self.net(state_array).data.cpu().max(1)[1]
         elif self.mode == 'lstm':
-            action, self.dqn_hidden_state, self.dqn_cell_state = self.dqn(states_variable, self.train_hidden_state, self.train_cell_state)
+            action, self.dqn_hidden_state, self.dqn_cell_state = self.net(state_array, self.train_hidden_state, self.train_cell_state)
             action = action.data.cpu().max(1)[1]
 
         return action

@@ -30,10 +30,13 @@ parser.set_defaults(clip=True, load_latest=True, record=False, inspect=False)
 parser: argparse.Namespace = parser.parse_args()
 
 
+class TEST():
+    def __init__(self, test = ):
+        
+
 def main(parser: argparse.Namespace):
-    env = Env(args = parser)
     brain = Brain(args = parser)
-    env.init()
+    brain.train()
 
 
 

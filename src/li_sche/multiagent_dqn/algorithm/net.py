@@ -6,9 +6,8 @@ from torch.nn import functional as F
 from collections import deque
 from collections import namedtuple
 from random import random, sample
-
-
 from .constant import *
+
 
 class ReplayMemory(object):
     def __init__(self, capacity=REPLAY_MEMORY):
@@ -40,29 +39,22 @@ class ReplayMemory(object):
             self._available = True
         return self._available
 
-class DQN(nn.Module):
+
+class Decide_Grouping(nn.Module):
     def __init__(self, n_action):
-        super(DQN, self).__init__()
+        super(Decide_Grouping, self).__init__()
         self.n_action = n_action
 
-        self.conv1 = nn.Conv2d(4, 32, kernel_size=8, stride=4, padding=0)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=0)
-        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=0)
+        self.encoder = nn.Sequential(
+            nn.Linear(1*2, 8),
+            nn.LeakyRelu(0.02),
+            nn.Linear(8, n_action),
+            nn.LeakyRelu(0.02),
+        )
 
-        self.affine1 = nn.Linear(3136, 512)
-        self.affine2 = nn.Linear(512, self.n_action)
-
-    def forward(self, x):
-        h = F.relu(self.conv1(x))
-        h = F.relu(self.conv2(h))
-        h = F.relu(self.conv3(h))
-
-        # print(h.size())
-        # print(h.view(h.size(0), -1).size())
-
-        h = F.relu(self.affine1(h.view(h.size(0), -1)))
-        h = self.affine2(h)
-        return h
+    def forward(self, state_variable):
+        y = self.encoder(state_variable)
+        return y
 
 
 class LSTMDQN(nn.Module):
