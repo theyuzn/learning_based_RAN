@@ -85,9 +85,9 @@ class GroupAgent:
     def preprocessing(self, state : state):
         STEP = 0.2
         nrofULUE = len(state.ul_uelist)
-        state_ndarray = np.array(12)
-        data_size_ndarray = np.array(nrofULUE)
-        delay_bound_ndarray = np.array(nrofULUE)
+        state_ndarray = np.empty(12)
+        data_size_ndarray = np.empty(nrofULUE)
+        delay_bound_ndarray = np.empty(nrofULUE)
         ue : UE
         i, state_idx, cnter = 0
         step = 0.
@@ -113,7 +113,7 @@ class GroupAgent:
         ### Calculate the number of UE in each step of size of data
         i = 0
         step = 0.
-        for i  in nrofULUE :
+        for i  in range(nrofULUE) :
             if data_size_ndarray[i]/size_range <= step and data_size_ndarray[i]/size_range > step :
                 cnter += 1
             else:
@@ -126,7 +126,7 @@ class GroupAgent:
         ### Calculate the number of UE in each step of delay bound
         i = 0
         step = 0.
-        for i  in nrofULUE :
+        for i  in range(nrofULUE) :
             if delay_bound_ndarray[i]/delay_range <= step and delay_bound_ndarray[i]/delay_range > step :
                 cnter += 1
             else:

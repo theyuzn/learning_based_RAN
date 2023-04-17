@@ -2,6 +2,7 @@ import argparse
 
 from multiagent_dqn.envs.env import Env
 from multiagent_dqn.agent.brain import Brain
+import numpy as np
 
 parser = argparse.ArgumentParser(description='DQN Configuration')
 parser.add_argument('--bw', default=400,type=int,help='channel bandwidth in MHz')
@@ -30,11 +31,7 @@ parser.set_defaults(clip=True, load_latest=True, record=False, inspect=False)
 parser: argparse.Namespace = parser.parse_args()
 
 
-class TEST():
-    def __init__(self, test = ):
-        
-
-def main(parser: argparse.Namespace):
+def main(parser: argparse.Namespace):    
     brain = Brain(args = parser)
     brain.train()
 

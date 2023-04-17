@@ -20,6 +20,7 @@ NUMBER_OF_SUBFRAME  = 10
 MAX_UPLINK_GRANT    = 124
 MAX_GROUP           = 4
 PRE_SCHE_SLOT       = 6
+SIZE_PER_RB         = 400
 
 
 ## The global variable to store all the UE info in system ##
@@ -66,12 +67,6 @@ class state :
     def rm_ue(self, ue : UE):
         self.ul_uelist.remove(ue)
 
-    def add_collision(self, group_id : int, nrofCollision = 1):
-        self.collision_list[group_id - 1] = self.collision_list[group_id - 1] + nrofCollision
-
-    def add_success(self, group_id : int):
-        self.success_list[group_id] = self.success_list[group_id] + 1
-
     def set_schedule_slot_info(self, schedule_slot_info):
         self.schedule_slot_info = schedule_slot_info
 
@@ -94,31 +89,34 @@ class RAN_system:
                                      k1 = self.args.k1,
                                      k2 = self.args.k2,
                                      )
-    
-    def init(self):
+
+        ## To add UE data to global variable UE_list
         global UE_list
         self.slot = 0
         UE_list = []
-        self.intial_state = state()
-
         cur_path = os.path.dirname(__file__)
         new_path = os.path.join(cur_path, '../../../data/uedata.json')
         with open(new_path, 'r') as ue_file:
             UE_list = json.load(ue_file,object_hook=decode_json) 
+
+    ### Return 'D'; 'S'; 'U'
+    def _get_slot_info(self, slot):
+        return self.ran_config.slot_pattern[slot % self.ran_config.pattern_p] 
         
-        self.intial_state.reset()
-        self.intial_state.set_schedule_slot_info(  \
-            self.ran_config.slot_pattern[(self.slot + PRE_SCHE_SLOT) % self.ran_config.pattern_p]   \
-                )
-        return self.intial_state
-    
 
-    def reset(self):
+    def init(self):
+        global UE_list
         self.slot = 0
-        return self.intial_state
+        self.ul_uelist = UE_list 
+        schedule_slot_info = self._get_slot_info(self.slot + PRE_SCHE_SLOT)
+        initial_state = state(schedule_slot_info= schedule_slot_info, ul_uelist = self.ul_uelist, collision_list=[], success_list=[])
+        return initial_state
+    
+    def reset(self):
+        return self.init()
     
 
-    def reward(self, 
+    def _reward(self, 
                slot_information,
                size_of_recv : int = 0, 
                size_of_exp : int = 0):
@@ -137,48 +135,52 @@ class RAN_system:
         return reward
     
 
-    ### Return schedule_slot_info
-    def add_slot(self):
+
+    ### Return 
+    def send_DCI(self):
+        ## Current slot calculate reward
+        slot_info = self._get_slot_info(self.slot)
+        reward = self._reward(slot_information = slot_info)
+
+        ## Update state
         self.slot += 1
-        return self.ran_config.slot_pattern[(self.slot + PRE_SCHE_SLOT) % self.ran_config.pattern_p] 
+        schedule_slot_info = self._get_slot_info(self.slot + PRE_SCHE_SLOT)
+        next_state = state(schedule_slot_info = schedule_slot_info, collision_list=[], success_list=[])
+
+        if self.slot >= SIMULATION_FRAME * NUMBER_OF_SUBFRAME * pow(2, self.ran_config.numerology):
+            self.done = True
         
-    
-    def send_DCI(self):        
-        return 
+        return next_state, reward, self.done
     
     def harq(self):
-        return
+        ## Current slot calculate reward
+        slot_info = self._get_slot_info(self.slot)
+        reward = self._reward(slot_information = slot_info)
+
+        ## Update state
+        self.slot += 1
+        schedule_slot_info = self._get_slot_info(self.slot + PRE_SCHE_SLOT)
+        next_state = state(schedule_slot_info = schedule_slot_info, collision_list=[], success_list=[])
+
+        if self.slot >= SIMULATION_FRAME * NUMBER_OF_SUBFRAME * pow(2, self.ran_config.numerology):
+            self.done = True
+        
+        return next_state, reward, self.done
     
 
     def contenion(self, group_list : list):
-        return
-
-
-    # return S(t+1)
-    def step(self, group_list : list):
-        next_state = state()
+        ## Current slot calculate reward
         success_ul_uelist = list()
         failed_ul_uelist = list()
-        slot_information = self.ran_config.slot_pattern[self.slot % self.ran_config.pattern_p]
+        exp_RB, recv_RB = 0
+        slot_info = self._get_slot_info(self.slot)
 
-        # match self.ran_config.slot_pattern[self.slot % self.ran_config.pattern_p] :
-        #     case 'D':
-        #         self.slot_type = 'D'
-        #     case 'U':
-        #         self.slot_type = 'U'
-        #     case 'S':
-        #         self.slot_type = 'S'
-
-        # Calculate the RBs
-        exp_RB = 0
-        recvd_RB = 0
-
-        # Each UE in each group will randomly select a shared RB
         for i in range(len(group_list)):
-            group : Gorup_result = group_list[i]
-            nrofRB : int = group.get_RB()
-            ul_uelist = group.get_ul_uelist
+            group : Result = group_list[i]
+            nrofRB = group.get_RB()
+            ul_uelist = group.get_ul_uelist()
             rb_map = dict()
+            collision_list, success_list = [None]*MAX_GROUP
 
             for j in range(len(ul_uelist)) :
                 # To calculate the expoected RB
@@ -193,44 +195,34 @@ class RAN_system:
                 else:
                     rb_map[rb_id] = [ul_uelist[j]]
 
-            # Contention resolution
+
+             # Contention resolution
             for id in rb_map:
                 if len(rb_map[id]) > 1:
-                    next_state.add_collision(group.get_id(), len(rb_map[id]))
                     for ue_id in range(len(rb_map[id])):
                         failed_ul_uelist.append(rb_map[id][ue_id])
+                        collision_list[group.get_id()] += 1
 
                 elif  len(rb_map[id]) == 1:
-                    next_state.add_success(group.get_id())
                     success_ul_uelist.append(rb_map[id][0])
-                
-                else :
-                    continue
+                    success_list[group.get_id()] += 1
+               
+            # Calculate the reward
+            success_ul_ue : UE
+            for success_ul_ue in success_ul_uelist:
+                recv_RB = recv_RB + success_ul_ue.nrofRB
+            reward = self.reward(slot_information = slot_info, size_of_recv = recv_RB, size_of_exp=exp_RB, collision_list=failed_ul_uelist, success_list=success_ul_uelist)
 
-        # Calculate the reward
-        success_ul_ue : UE
-        for success_ul_ue in success_ul_uelist:
-            recvd_RB = recvd_RB + success_ul_ue.nrofRB
-        reward = self.reward(slot_information = slot_information, size_of_recv = recvd_RB, size_of_exp=exp_RB, collision_list=failed_ul_uelist, success_list=success_ul_uelist)
 
-        
-        # The Done condition
-        if self.slot >= SIMULATION_FRAME * NUMBER_OF_SUBFRAME* pow(2, self.ran_config.numerology):
-            done = True
+            ## Update state
+            self.slot += 1
+            schedule_slot_info = self._get_slot_info(self.slot + PRE_SCHE_SLOT)
+            next_state = state(schedule_slot_info = schedule_slot_info, collision_list = collision_list, success_list = success_list)
 
-        if len(next_state.ul_uelist) == 0:
-            done = True
+            if self.slot >= SIMULATION_FRAME * NUMBER_OF_SUBFRAME * pow(2, self.ran_config.numerology):
+                self.done = True
             
-                 
-        ## Update the next round 
-        self.slot = self.slot + 1
-        next_state.set_schedule_slot_info(  \
-            self.ran_config.slot_pattern[(self.slot + PRE_SCHE_SLOT) % self.ran_config.pattern_p]   \
-                )
-        
-        return next_state, reward, done
-
-        
+            return next_state, reward, self.done
         
         
 class Env:
@@ -240,8 +232,7 @@ class Env:
             
     # return initial state
     def init(self):
-        self.current_state = self.ran_system.reset()
-        return self.current_state
+        return self.ran_system.reset()
 
     def step(self, group_list : list):
         

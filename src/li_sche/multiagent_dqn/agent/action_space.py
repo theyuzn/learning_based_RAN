@@ -70,7 +70,7 @@ class mcs_action_space:
         return self.n
     
 
-class Gorup_result:
+class Result:
     def __init__(self, group_id = 0,ul_uelist = [], nrofRB = 0, mcs = 10):
         self.group_id = group_id
         self.ul_uelist = ul_uelist
@@ -86,18 +86,14 @@ class Gorup_result:
     def set_RB(self, nrofRB):
         self.nrofRB = nrofRB
 
-    @property
     def get_id(self):
         return self.group_id
 
-    @property
     def get_ul_uelist(self):
         return self.ul_uelist
     
-    @property
     def get_RB(self):
         return self.nrofRB
     
-    @property
     def get_mcs(self):
         return self.mcs
