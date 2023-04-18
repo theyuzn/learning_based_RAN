@@ -9,7 +9,7 @@ import sys
 
 from collections import deque
 from collections import namedtuple
-from random import random, sample
+from random import random, randrange, sample
 
 import numpy as np
 import pylab
@@ -21,7 +21,7 @@ from torch.nn import functional as F
 from torchvision import transforms as T
 
 
-from ..envs.env import Env
+from ..envs.env import Env, MAX_GROUP
 from ..algorithm.net import *
 from ..algorithm.constant import *
 from .group_agent import GroupAgent
@@ -55,6 +55,24 @@ class Brain():
     def recent_states(self):
         return np.array(self._state_buffer)
 
+    ############# Test #############
+    def test_system(self):
+        state = self.env.reset()
+        slot = 0
+        done = False
+        while not done:
+            ul_uelist = state.ul_uelist
+
+            for i in range(len(ul_uelist)):
+                ul_uelist[i].set_Group(randrange(MAX_GROUP))
+                ul_uelist[i].set_RB(1)
+
+            state, reward, done = self.env.step(action = ul_uelist)
+
+            print(f'slot:\t${slot}\t==>,len(state):\t{len(state.ul_uelist)}\t,reward:\t{reward}\t,done:\t{done}')
+            slot += 1
+
+
 
     ############# Train #############
     def train(self, gamma: float = 0.99):
@@ -65,10 +83,9 @@ class Brain():
 
         while True:
             # Init LSTM States
-            if self.mode == 'lstm':
-                # For Training
-                self.train_hidden_state, self.train_cell_state = self.dqn.reset_states(self.train_hidden_state,
-                                                                                       self.train_cell_state)
+            # if self.mode == 'lstm':
+            #     # For Training
+            #     self.train_hidden_state, self.train_cell_state = self.dqn.reset_states(self.train_hidden_state,self.train_cell_state)
 
             states = self.get_initial_states()
             losses = []

@@ -27,10 +27,18 @@ SIZE_PER_RB         = 400
 UE_list = []
 
 def decode_json(dct):
-    return  UE(id = dct[ID],
-               sizeOfData = dct[SIZE],
-               delay_bound = dct[DELAY],
-               type = dct[TYPE])
+    return  UE(
+                id              = dct[ID], 
+                sizeOfData      = dct[SIZE],
+                delay_bound     = dct[DELAY],
+                window          = dct[WINDOW],
+                service         = dct[SERVICE],
+                nr5QI           = dct[NR5QI],
+                errorrate       = dct[ER],
+                type            = dct[TYPE],
+                group           = -1,
+                rb_id           = -1,
+                nrofRB          = -1)
 
 class RAN_config:
     def __init__(self, 
@@ -55,14 +63,10 @@ class RAN_config:
 class state :
     def __init__(self, 
                  schedule_slot_info = 'D',
-                 ul_uelist = [], 
-                 collision_list = [None]*MAX_GROUP, 
-                 success_list = [None]*MAX_GROUP):
+                 ul_uelist = []):
         
         self.schedule_slot_info = schedule_slot_info
         self.ul_uelist = ul_uelist
-        self.collision_list = collision_list
-        self.success_list = success_list
 
     def rm_ue(self, ue : UE):
         self.ul_uelist.remove(ue)
@@ -73,8 +77,6 @@ class state :
     def reset(self):
         global UE_list
         self.ul_uelist = UE_list
-        self.collision_list = [None]*MAX_GROUP
-        self.success_list = [None]*MAX_GROUP
         self.schedule_slot_info = 'D'
  
 
@@ -82,6 +84,7 @@ class RAN_system:
     def __init__(self, args : argparse.Namespace):
         self.slot = 0
         self.args = args
+        self.done = False
         self.ran_config = RAN_config(BW = self.args.bw,
                                      numerology = self.args.mu,
                                      nrofRB = self.args.rb,
@@ -102,14 +105,15 @@ class RAN_system:
     ### Return 'D'; 'S'; 'U'
     def _get_slot_info(self, slot):
         return self.ran_config.slot_pattern[slot % self.ran_config.pattern_p] 
-        
+
 
     def init(self):
         global UE_list
         self.slot = 0
-        self.ul_uelist = UE_list 
+        self.ul_uelist = UE_list
+        print(self.ul_uelist)
         schedule_slot_info = self._get_slot_info(self.slot + PRE_SCHE_SLOT)
-        initial_state = state(schedule_slot_info= schedule_slot_info, ul_uelist = self.ul_uelist, collision_list=[], success_list=[])
+        initial_state = state(schedule_slot_info= schedule_slot_info, ul_uelist = self.ul_uelist)
         return initial_state
     
     def reset(self):
@@ -118,111 +122,171 @@ class RAN_system:
 
     def _reward(self, 
                slot_information,
-               size_of_recv : int = 0, 
-               size_of_exp : int = 0):
+               collision_number_map : dict = dict(), 
+               success_number_map : dict = dict(),
+               expect_data_map : dict = dict(),
+               success_data_map : dict = dict()
+    ):
         
         reward = 0
-        weight_recv = 1
-        weight_exp = 0.8
-        collision_weight = [1,1,1,1]
-        success_weight = [1,1,1,1]
+        ## These weight size equal to MAX_GROUP 
+        weight_recv_data = [1,1,1,1]
+        weight_exp_data = [0.8,0.8,0.8,0.8]
+        weight_col = [1,1,1,1]
+        weight_suc = [1,1,1,1]
 
         if slot_information == 'D' or slot_information == 'S':
             return 0
         else :
-            reward = (weight_recv * size_of_recv) - (weight_exp * size_of_exp)
+            for group_id in collision_number_map:
+                reward += weight_recv_data[group_id]*success_data_map[group_id] \
+                            - weight_exp_data[group_id] * expect_data_map[group_id] \
+                                + weight_suc[group_id] * success_number_map[group_id] \
+                                    - weight_col[group_id] * collision_number_map[group_id]
         
         return reward
     
 
 
-    ### Return 
-    def send_DCI(self):
+    ### Return reward
+    def send_DCI(self, slot_info):
         ## Current slot calculate reward
-        slot_info = self._get_slot_info(self.slot)
         reward = self._reward(slot_information = slot_info)
-
-        ## Update state
-        self.slot += 1
-        schedule_slot_info = self._get_slot_info(self.slot + PRE_SCHE_SLOT)
-        next_state = state(schedule_slot_info = schedule_slot_info, collision_list=[], success_list=[])
-
-        if self.slot >= SIMULATION_FRAME * NUMBER_OF_SUBFRAME * pow(2, self.ran_config.numerology):
-            self.done = True
-        
-        return next_state, reward, self.done
+        return reward
     
-    def harq(self):
+    def harq(self, slot_info):
         ## Current slot calculate reward
-        slot_info = self._get_slot_info(self.slot)
         reward = self._reward(slot_information = slot_info)
-
-        ## Update state
-        self.slot += 1
-        schedule_slot_info = self._get_slot_info(self.slot + PRE_SCHE_SLOT)
-        next_state = state(schedule_slot_info = schedule_slot_info, collision_list=[], success_list=[])
-
-        if self.slot >= SIMULATION_FRAME * NUMBER_OF_SUBFRAME * pow(2, self.ran_config.numerology):
-            self.done = True
-        
-        return next_state, reward, self.done
+        return reward
     
 
-    def contenion(self, group_list : list):
-        ## Current slot calculate reward
-        success_ul_uelist = list()
-        failed_ul_uelist = list()
-        exp_RB, recv_RB = 0
-        slot_info = self._get_slot_info(self.slot)
+    def contenion(self, action : list, slot_info):
+        ### The highest level parameterm
+        ul_uelist = action
 
-        for i in range(len(group_list)):
-            group : Result = group_list[i]
-            nrofRB = group.get_RB()
-            ul_uelist = group.get_ul_uelist()
-            rb_map = dict()
-            collision_list, success_list = [None]*MAX_GROUP
+        ####### !~ { The group_id is 0 ~ MAX_GROUP-1 } ~! ##########
+        ## Arrange the grouping map which store the every UE which is allocated to the group
+        ## group_map                : { group_id : [ue, ue, ue, ue, ...], ...} 
+        group_map = dict()
 
-            for j in range(len(ul_uelist)) :
-                # To calculate the expoected RB
-                ue : UE = ul_uelist[j]
-                exp_RB = exp_RB + ue.nrofRB
+        ## To store the number of collision in each group
+        ## collision_number_map    : { group_id : number_of_collision, ...}
+        collision_number_map = dict() 
 
-                # Each UE select a RB to transmit
-                rb_id = random.randrange(nrofRB) + 1
-                ul_uelist[j].set_RB_ID(rb_id)
-                if rb_id in rb_map:
-                    rb_map[rb_id].append(ul_uelist[j])
-                else:
-                    rb_map[rb_id] = [ul_uelist[j]]
+        ## To store the number of success in each group
+        ## collision_number_map    : { group_id : number_of_success, ...}
+        success_number_map = dict()
 
+        ## To store the total (expected) uplink transmission RBs
+        ## expect_data_map          : { group_id : nrofRB, ...}
+        expect_data_map = dict()
 
-             # Contention resolution
-            for id in rb_map:
-                if len(rb_map[id]) > 1:
-                    for ue_id in range(len(rb_map[id])):
-                        failed_ul_uelist.append(rb_map[id][ue_id])
-                        collision_list[group.get_id()] += 1
+        ## To store the successful uplink transmission data size
+        ## success_data_map         : { group_id : nrofRB, ...}
+        success_data_map = dict()
 
-                elif  len(rb_map[id]) == 1:
-                    success_ul_uelist.append(rb_map[id][0])
-                    success_list[group.get_id()] += 1
-               
-            # Calculate the reward
-            success_ul_ue : UE
-            for success_ul_ue in success_ul_uelist:
-                recv_RB = recv_RB + success_ul_ue.nrofRB
-            reward = self.reward(slot_information = slot_info, size_of_recv = recv_RB, size_of_exp=exp_RB, collision_list=failed_ul_uelist, success_list=success_ul_uelist)
-
-
-            ## Update state
-            self.slot += 1
-            schedule_slot_info = self._get_slot_info(self.slot + PRE_SCHE_SLOT)
-            next_state = state(schedule_slot_info = schedule_slot_info, collision_list = collision_list, success_list = success_list)
-
-            if self.slot >= SIMULATION_FRAME * NUMBER_OF_SUBFRAME * pow(2, self.ran_config.numerology):
-                self.done = True
+        ## Store each ue into map
+        for ue in ul_uelist:
+            group_id = ue.group
+            if group_id in group_map:
+                group_map[group_id].append(ue)
+            else:
+                group_map[group_id] = [ue]
+        
+        ## In each group, the UE will randomly select a RB to transmit information
+        for group_id in group_map:
+            collision_number_map[group_id] = 0
+            success_number_map[group_id] = 0
+            expect_data_map[group_id] = 0
+            success_data_map[group_id] = 0
             
-            return next_state, reward, self.done
+            group = group_map[group_id]
+            # Calculate the total aviavlible RBs in one group
+            total_RB = 0
+            for i in range(len(group)):
+                total_RB += group[i].nrofRB
+            expect_data_map[group_id] = total_RB * SIZE_PER_RB
+
+            # Each UE ramdonly select
+            for i in range(len(group)):
+                if group_id == 0: # The scheduled UE has no need to contention
+                    group[i].set_RB_ID(i + 1)
+                else:
+                    group[i].set_RB_ID(random.randrange(total_RB) + 1)
+            
+            # Perform contention in every group
+            # rb_map : {rb_id : [ue, ue, ...], ...}
+            rb_map = dict()
+            for ue in group:
+                rb_id = ue.rb_id
+                if rb_id in rb_map:
+                    rb_map[rb_id].append(ue)
+                else:
+                    rb_map[rb_id] = [ue]
+
+            # To update the collision and success map
+            # update the self.ul_uelist if the ul_ue success to transmit the data
+            for rb_id in rb_map:
+
+                # Contention failed
+                if len(rb_map[rb_id]) > 1:
+                    collision_number_map[group_id] += len(rb_map[rb_id])
+
+                # Contention resolution
+                elif len(rb_map[rb_id]) == 1 :
+                    success_number_map[group_id] += len(rb_map[rb_id])
+                    ue_id = rb_map[rb_id][0].id
+                    size = rb_map[rb_id][0].nrofRB * SIZE_PER_RB
+                    for i in range(len(self.ul_uelist)):                        
+                        if ue_id == self.ul_uelist[i].id:
+                            success_data_map[group_id] += size
+                            self.ul_uelist[i].decay_size(size)
+                            
+
+        ## Out of the group loop
+        ## Calculate the reward
+        reward = self._reward(slot_information = slot_info, \
+                                collision_number_map = collision_number_map, \
+                                    success_number_map=success_number_map, \
+                                        expect_data_map=expect_data_map, \
+                                            success_data_map=success_data_map)
+
+        return reward
+
+    def step(self, action:list):
+        # To calculate the reward
+        ul_uelist = action
+        slot_info = self._get_slot_info(self.slot)
+        reward = 0
+        match slot_info:
+            case 'D':
+                reward = self.send_DCI(slot_info = 'D')
+            case 'S':
+                reward = self.harq(slot_info = 'S')
+            case 'U':
+                reward = self.contenion(action = ul_uelist, slot_info = 'U')
+
+
+        ## Update state
+        self.slot += 1
+        schedule_slot_info = self._get_slot_info(self.slot + PRE_SCHE_SLOT)
+
+        for i in range(len(self.ul_uelist)):
+            self.ul_uelist[i].decay_delay(1)
+
+        ue : UE
+        for ue in self.ul_uelist:
+            if ue.sizeOfData <= 0 or ue.delay_bound <= 0:
+                self.ul_uelist.remove(ue)
+
+        next_state = state(schedule_slot_info = schedule_slot_info, ul_uelist= self.ul_uelist)
+        if self.slot >= SIMULATION_FRAME * NUMBER_OF_SUBFRAME * pow(2, self.ran_config.numerology):
+            self.done = True
+        if len(self.ul_uelist) == 0:
+            self.done = True
+
+
+        return next_state, reward, self.done
         
         
 class Env:
@@ -234,24 +298,10 @@ class Env:
     def init(self):
         return self.ran_system.reset()
 
-    def step(self, group_list : list):
-        
-        current_slot = self.ran_system.slot
-        pattern_p = self.ran_system.ran_config.pattern_p
-        slot_pattern = self.ran_system.ran_config.slot_pattern
-        slot_info = slot_pattern[current_slot % pattern_p]
-
-        next_state : state
-        reward = 0
-        done = False
-        match slot_info:
-            case 'D':
-                next_state, reward, done = self.ran_system.send_DCI()
-            case 'S':
-                next_state, reward, done = self.ran_system.harq()
-            case 'U':
-                next_state, reward, done = self.ran_system.contenion(group_list = group_list)
-
+    ## Action is store in ul_uelist
+    def step(self, action : list):
+        ul_list = action
+        next_state, reward, done = self.ran_system.step(ul_list)
         return next_state, reward, done
 
     def reset(self):

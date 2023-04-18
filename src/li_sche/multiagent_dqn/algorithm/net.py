@@ -47,9 +47,9 @@ class Decide_Grouping(nn.Module):
 
         self.encoder = nn.Sequential(
             nn.Linear(1*2, 8),
-            nn.LeakyRelu(0.02),
+            nn.LeakyReLU(0.02),
             nn.Linear(8, n_action),
-            nn.LeakyRelu(0.02),
+            nn.LeakyReLU(0.02),
         )
 
     def forward(self, state_variable):

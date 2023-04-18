@@ -33,7 +33,13 @@ parser: argparse.Namespace = parser.parse_args()
 
 def main(parser: argparse.Namespace):    
     brain = Brain(args = parser)
-    brain.train()
+
+
+    brain.test_system()
+
+
+    # brain.train()
+
 
 
 
