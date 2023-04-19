@@ -102,8 +102,6 @@ class Brain():
         state_idx = 0
         total_size = 0
 
-        
-
         ### Initial all the data
         i = 0
         for ue in state.ul_uelist :
@@ -189,6 +187,7 @@ class Brain():
                             ue.set_RB(1)
                             action_uelist.append(ue)
                     break
+                
 
                 next_state, reward, done = self.env.step(action_uelist)
                 state = next_state

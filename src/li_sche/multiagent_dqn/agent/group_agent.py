@@ -69,4 +69,5 @@ class GroupAgent:
         
         state_array = torch.as_tensor(state, dtype = torch.float)
         action = self.net.forward(state_variable = state_array)
+        print(action)
         return action
