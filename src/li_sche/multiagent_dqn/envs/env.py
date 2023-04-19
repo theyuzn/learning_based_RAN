@@ -17,7 +17,7 @@ PATTERN_P3          = 10
 
 SIMULATION_FRAME    = 200
 NUMBER_OF_SUBFRAME  = 10
-MAX_UPLINK_GRANT    = 124
+MAX_UPLINK_GRANT    = 16
 MAX_GROUP           = 4
 PRE_SCHE_SLOT       = 6
 SIZE_PER_RB         = 400
@@ -28,7 +28,7 @@ UE_list = []
 
 def decode_json(dct):
     return  UE(
-                id              = dct[ID], 
+                id              = 0, 
                 sizeOfData      = dct[SIZE],
                 delay_bound     = dct[DELAY],
                 window          = dct[WINDOW],
@@ -38,7 +38,8 @@ def decode_json(dct):
                 type            = dct[TYPE],
                 group           = -1,
                 rb_id           = -1,
-                nrofRB          = -1)
+                nrofRB          = -1,
+                is_SR_sent      = False)
 
 class RAN_config:
     def __init__(self, 
@@ -60,7 +61,7 @@ class RAN_config:
         self.pattern_p      = pattern_p
 
 
-class state :
+class State :
     def __init__(self, 
                  schedule_slot_info = 'D',
                  ul_uelist = []):
@@ -74,24 +75,27 @@ class state :
     def set_schedule_slot_info(self, schedule_slot_info):
         self.schedule_slot_info = schedule_slot_info
 
+    def get_schedule_slot_info(self):
+        return self.schedule_slot_info
+
     def reset(self):
         global UE_list
         self.ul_uelist = UE_list
         self.schedule_slot_info = 'D'
  
 
-class RAN_system:
+class RAN_system(RAN_config):
     def __init__(self, args : argparse.Namespace):
+        
         self.slot = 0
         self.args = args
         self.done = False
-        self.ran_config = RAN_config(BW = self.args.bw,
-                                     numerology = self.args.mu,
-                                     nrofRB = self.args.rb,
-                                     k0 = self.args.k0,
-                                     k1 = self.args.k1,
-                                     k2 = self.args.k2,
-                                     )
+        super(RAN_system, self).__init__(BW = self.args.bw,
+                                        numerology = self.args.mu,
+                                        nrofRB = self.args.rb,
+                                        k0 = self.args.k0,
+                                        k1 = self.args.k1,
+                                        k2 = self.args.k2,)
 
         ## To add UE data to global variable UE_list
         global UE_list
@@ -101,20 +105,27 @@ class RAN_system:
         new_path = os.path.join(cur_path, '../../../data/uedata.json')
         with open(new_path, 'r') as ue_file:
             UE_list = json.load(ue_file,object_hook=decode_json) 
+        for i in range(len(UE_list)):
+            UE_list[i].id = i + 1
+            
+        self.temp_UE_list = UE_list.copy()
+        self.ul_uelist = list()
 
     ### Return 'D'; 'S'; 'U'
     def _get_slot_info(self, slot):
-        return self.ran_config.slot_pattern[slot % self.ran_config.pattern_p] 
+        return self.slot_pattern[slot % self.pattern_p]
 
 
     def init(self):
-        global UE_list
         self.slot = 0
-        self.ul_uelist = UE_list
-        print(self.ul_uelist)
         schedule_slot_info = self._get_slot_info(self.slot + PRE_SCHE_SLOT)
-        initial_state = state(schedule_slot_info= schedule_slot_info, ul_uelist = self.ul_uelist)
-        return initial_state
+        current_slot_info = self._get_slot_info(self.slot)
+
+        if current_slot_info == 'U':
+            for _ in range(MAX_UPLINK_GRANT):
+                self.ul_uelist = self.temp_UE_list.pop(0)
+
+        return State(schedule_slot_info= schedule_slot_info, ul_uelist = self.ul_uelist)
     
     def reset(self):
         return self.init()
@@ -233,7 +244,7 @@ class RAN_system:
                     collision_number_map[group_id] += len(rb_map[rb_id])
 
                 # Contention resolution
-                elif len(rb_map[rb_id]) == 1 :
+                else:
                     success_number_map[group_id] += len(rb_map[rb_id])
                     ue_id = rb_map[rb_id][0].id
                     size = rb_map[rb_id][0].nrofRB * SIZE_PER_RB
@@ -255,36 +266,47 @@ class RAN_system:
 
     def step(self, action:list):
         # To calculate the reward
-        ul_uelist = action
-        slot_info = self._get_slot_info(self.slot)
+            
+        current_slot_info = self._get_slot_info(self.slot)
         reward = 0
-        match slot_info:
+        match current_slot_info:
             case 'D':
                 reward = self.send_DCI(slot_info = 'D')
             case 'S':
                 reward = self.harq(slot_info = 'S')
             case 'U':
-                reward = self.contenion(action = ul_uelist, slot_info = 'U')
+                reward = self.contenion(action = action, slot_info = 'U')
 
 
         ## Update state
         self.slot += 1
         schedule_slot_info = self._get_slot_info(self.slot + PRE_SCHE_SLOT)
+        current_slot_info = self._get_slot_info(self.slot)
 
+        ## Update the UEs which have been already scheduled
         for i in range(len(self.ul_uelist)):
             self.ul_uelist[i].decay_delay(1)
-
         ue : UE
         for ue in self.ul_uelist:
             if ue.sizeOfData <= 0 or ue.delay_bound <= 0:
                 self.ul_uelist.remove(ue)
+        
+        ## Add other UEs which have not been scheduled if there are some.
+        ## Only in UL slot, the UE can send Scheduling Request
+        if current_slot_info == 'U':
+            for _ in range(MAX_UPLINK_GRANT):
+                if len(self.temp_UE_list):
+                    self.ul_uelist.append(self.temp_UE_list.pop(0))
+                else:
+                    break
 
-        next_state = state(schedule_slot_info = schedule_slot_info, ul_uelist= self.ul_uelist)
-        if self.slot >= SIMULATION_FRAME * NUMBER_OF_SUBFRAME * pow(2, self.ran_config.numerology):
+
+        if self.slot >= SIMULATION_FRAME * NUMBER_OF_SUBFRAME * pow(2, self.numerology):
             self.done = True
-        if len(self.ul_uelist) == 0:
+        if len(self.temp_UE_list) == 0 and len(self.ul_uelist) == 0:
             self.done = True
 
+        next_state = State(schedule_slot_info = schedule_slot_info, ul_uelist = self.ul_uelist)
 
         return next_state, reward, self.done
         
@@ -293,6 +315,7 @@ class Env:
     def __init__(self, args : argparse.Namespace):
         self.args = args
         self.ran_system = RAN_system(self.args)
+        self.action_map = dict()
             
     # return initial state
     def init(self):
@@ -300,8 +323,15 @@ class Env:
 
     ## Action is store in ul_uelist
     def step(self, action : list):
-        ul_list = action
-        next_state, reward, done = self.ran_system.step(ul_list)
+        schedule_slot = (self.ran_system.slot + PRE_SCHE_SLOT)
+        self.action_map[schedule_slot] = action.copy()
+        
+        action_ul_list = list()
+        if self.ran_system.slot in self.action_map:
+            action_ul_list = self.action_map[self.ran_system.slot].copy()
+            del self.action_map[self.ran_system.slot]
+
+        next_state, reward, done = self.ran_system.step(action = action_ul_list)
         return next_state, reward, done
 
     def reset(self):

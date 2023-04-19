@@ -21,7 +21,8 @@ from torch.nn import functional as F
 from torchvision import transforms as T
 
 
-from ..envs.env import Env, MAX_GROUP
+from ..envs.env import Env, MAX_GROUP, State
+from ..envs.ue import UE
 from ..algorithm.net import *
 from ..algorithm.constant import *
 from .group_agent import GroupAgent
@@ -31,22 +32,53 @@ from .ue_action import UEAgent
 class Brain():
     # Init
     def __init__(self, args: argparse.Namespace, cuda = True, action_repeat: int = 4):
+        self.action_repeat = action_repeat
+
+        self.replay = ReplayMemory()
+        self._state_buffer = deque(maxlen=self.action_repeat)
 
         # Environment
         self.env = Env(args=args)
+        self.step = 0
 
         # Agents
         self.grouping_action = GroupAgent(args=args)
-        # self.rb_action = RBAction(args=args)
-        # self.ue_action = UEAgent(args=args)
+        self.rb_action = RBAction(args=args)
+        self.ue_action = UEAgent(args=args)
 
 
+    ########################## Test ########################## 
+    def test_system(self):
+        state = self.env.reset()
+        slot = 0
+        done = False
+        while not done:
+            ul_uelist = state.ul_uelist
+
+            used_rb = 0
+            if state.schedule_slot_info == 'U':
+                for i in range(len(ul_uelist)):
+                    ul_uelist[i].set_Group(randrange(4))
+                    ul_uelist[i].set_RB(1)
+                    used_rb += 1
+                    # print(rf'used_rb ${used_rb}')
+                    if used_rb > 246:
+                        break
+
+            state, reward, done = self.env.step(action = ul_uelist)
+            slot += 1
+            print(f'{state}, {reward}, {done}', end = '\n')
+    ##########################################################
+
+
+    ########################## Replay buffer ##########################
     def get_initial_states(self):
         state = self.env.reset()
-        states = np.stack([state for _ in range(self.action_repeat)], axis=0)
-        self._state_buffer = deque(maxlen=self.action_repeat)
+        processed_state = self.preprocessing(state)
+        states = np.stack([processed_state for _ in range(self.action_repeat)], axis=0)
+        self._state_buffer = deque(maxlen = self.action_repeat)
         for _ in range(self.action_repeat):
-            self._state_buffer.append(state)
+            self._state_buffer.append(processed_state)
         return states
 
     def add_state(self, state):
@@ -55,23 +87,65 @@ class Brain():
     def recent_states(self):
         return np.array(self._state_buffer)
 
-    ############# Test ############# 
-    def test_system(self):
-        state = self.env.reset()
-        slot = 0
-        done = False
-        while not done:
-            ul_uelist = state.ul_uelist
 
-            for i in range(len(ul_uelist)):
-                ul_uelist[i].set_Group(randrange(MAX_GROUP))
-                ul_uelist[i].set_RB(1)
+    def preprocessing(self, state : State):
 
-            state, reward, done = self.env.step(action = ul_uelist)
+        if len(state.ul_uelist) < 1:
+            return np.empty(0)
+        
+        STEP = 0.2 # For 20% step in range
+        nrofULUE = len(state.ul_uelist)
+        state_ndarray = np.zeros(12)
+        data_size_ndarray = np.zeros(nrofULUE)
+        delay_bound_ndarray = np.zeros(nrofULUE)
+        ue : UE
+        state_idx = 0
+        total_size = 0
 
-            print(f'slot:\t${slot}\t==>,len(state):\t{len(state.ul_uelist)}\t,reward:\t{reward}\t,done:\t{done}')
-            slot += 1
+        
 
+        ### Initial all the data
+        i = 0
+        for ue in state.ul_uelist :
+            data_size_ndarray[i] = ue.sizeOfData
+            total_size += ue.sizeOfData
+            delay_bound_ndarray[i] = ue.delay_bound
+            i += 1
+
+        state_ndarray[state_idx] = nrofULUE
+        state_idx += 1
+        state_ndarray[state_idx] = total_size
+        state_idx += 1
+        
+        data_size_ndarray.sort(axis=0, kind='mergesort')
+        size_top = data_size_ndarray[nrofULUE - 1]
+        size_bottom = data_size_ndarray[0]
+        size_range = size_top - size_bottom
+
+        step = 0.2
+        for size in data_size_ndarray:
+            while size > size_range*step + size_bottom:
+                state_idx +=1
+                step += STEP
+            state_ndarray[state_idx] += 1
+            
+        state_idx += 1
+
+        delay_bound_ndarray.sort(axis=0, kind='mergesort')
+        delay_top = delay_bound_ndarray[nrofULUE - 1]
+        delay_bottom = delay_bound_ndarray[0]
+        delay_range = delay_top - delay_bottom
+
+        step = 0.2
+        for delay in delay_bound_ndarray:
+            while delay > delay_range*step + delay_bottom:
+                state_idx +=1
+                step += STEP
+            state_ndarray[state_idx] += 1
+        state_idx += 1
+
+        ### Return the processed state array
+        return state_ndarray
 
 
     ############# Train #############
@@ -82,98 +156,104 @@ class Brain():
         target_mean = [0., 0.]
 
         while True:
-            # Init LSTM States
-            # if self.mode == 'lstm':
-            #     # For Training
-            #     self.train_hidden_state, self.train_cell_state = self.dqn.reset_states(self.train_hidden_state,self.train_cell_state)
-
-            states = self.get_initial_states()
+            ### states is an np.stack which stores preprocessed state -- np.ndarray
+            # states : np.ndarray = self.get_initial_states()
+            state : State =  self.env.reset()
             losses = []
             target_update_flag = False
             play_flag = False
             play_steps = 0
             real_play_count = 0
             real_score = 0
-            reward = 0
+            cum_reward = 0
             done = False
 
             while True:
-                # Get Action
-                grouping_action: torch.LongTensor = self.grouping_action.select_action(states)
+                
+                action_uelist = list()
+                action_uelist = []
+                nrof_group = 0
+                if state.get_schedule_slot_info() == 'U' and len(state.ul_uelist) > 0:
+                    preprocessed_state = self.preprocessing(state)
+                    nrof_group = self.grouping_action.select_action(preprocessed_state)
+                    # ue_action : torch.LongTensor = self.ue_action.select_action(preprocessed_state)
 
-                for _ in range(self.frame_skipping):
-                    # step 에서 나온 observation은 버림
-                    observation, reward, done, info = self.env.step(action[0, 0])
-                    next_state = self.env.get_screen()
-                    self.add_state(next_state)
+                    if nrof_group == 1:
+                        for ue in state.ul_uelist:
+                            ue.set_Group(1)
+                            ue.set_RB(1)
+                            action_uelist.append(ue)
+                    else:
+                        for ue in state.ul_uelist:
+                            ue.set_Group(1)
+                            ue.set_RB(1)
+                            action_uelist.append(ue)
+                    break
 
-                    if done:
-                        break
+                next_state, reward, done = self.env.step(action_uelist)
+                state = next_state
+                cum_reward += reward
 
+                print(f'{cum_reward} : {nrof_group}')
                 # Store the infomation in Replay Memory
-                next_states = self.recent_states()
-                if done:
-                    self.replay.put(states, action, reward, None)
-                else:
-                    self.replay.put(states, action, reward, next_states)
+                # next_states = self.recent_states()
+                # if done:
+                #     self.replay.put(state, action, reward, None)
+                # else:
+                #     self.replay.put(state, action, reward, next_states)
 
                 # Change States
-                states = next_states
+                # states = next_states
 
                 # Optimize
-                if self.replay.is_available():
-                    loss, reward_sum, q_mean, target_mean = self.optimize(gamma)
-                    losses.append(loss[0])
+                # if self.replay.is_available():
+                #     loss, reward_sum, q_mean, target_mean = self.optimize(gamma)
+                #     losses.append(loss[0])
 
                 if done:
                     break
 
                 # Increase step
                 self.step += 1
-                play_steps += 1
-
-                # Target Update
-                if self.step % TARGET_UPDATE_INTERVAL == 0:
-                    self._target_update()
-                    target_update_flag = True
+                play_steps += 1             
 
 
                 # Play
-                if self.step % PLAY_INTERVAL == 0:
-                    play_flag = True
+                # if self.step % PLAY_INTERVAL == 0:
+                #     play_flag = True
 
-                    scores = []
-                    counts = []
-                    for _ in range(PLAY_REPEAT):
-                        score, real_play_count = self.play(logging=False, human=False)
-                        scores.append(score)
-                        counts.append(real_play_count)
-                        logger.debug(f'[{self.step}] [Validation] play_score: {score}, play_count: {real_play_count}')
-                    real_score = int(np.mean(scores))
-                    real_play_count = int(np.mean(counts))
+                #     scores = []
+                #     counts = []
+                #     for _ in range(PLAY_REPEAT):
+                #         score, real_play_count = self.play(logging=False, human=False)
+                #         scores.append(score)
+                #         counts.append(real_play_count)
+                #         logger.debug(f'[{self.step}] [Validation] play_score: {score}, play_count: {real_play_count}')
+                #     real_score = int(np.mean(scores))
+                #     real_play_count = int(np.mean(counts))
 
-                    if self.best_score <= real_score:
-                        self.best_score = real_score
-                        self.best_count = real_play_count
-                        logger.debug(f'[{self.step}] [CheckPoint] Play: {self.best_score} [Best Play] [checkpoint]')
-                        self.save_checkpoint(
-                            filename=f'dqn_checkpoints/chkpoint_{self.mode}_{self.best_score}.pth.tar')
+                #     if self.best_score <= real_score:
+                #         self.best_score = real_score
+                #         self.best_count = real_play_count
+                #         logger.debug(f'[{self.step}] [CheckPoint] Play: {self.best_score} [Best Play] [checkpoint]')
+                #         self.save_checkpoint(
+                #             filename=f'dqn_checkpoints/chkpoint_{self.mode}_{self.best_score}.pth.tar')
 
-            self._play_steps.append(play_steps)
+            # self._play_steps.append(play_steps)
 
             # Play
-            if play_flag:
-                play_flag = False
-                logger.info(f'[{self.step}] [Validation] mean_score: {real_score}, mean_play_count: {real_play_count}')
+            # if play_flag:
+            #     play_flag = False
+            #     logger.info(f'[{self.step}] [Validation] mean_score: {real_score}, mean_play_count: {real_play_count}')
 
-            # Logging
-            mean_loss = np.mean(losses)
-            target_update_msg = '  [target updated]' if target_update_flag else ''
-            # save_msg = '  [checkpoint!]' if checkpoint_flag else ''
-            logger.info(f'[{self.step}] Loss:{mean_loss:<8.4} Play:{play_steps:<3}  '  # AvgPlay:{self.play_step:<4.3}
-                        f'RewardSum:{reward_sum:<3} Q:[{q_mean[0]:<6.4}, {q_mean[1]:<6.4}] '
-                        f'T:[{target_mean[0]:<6.4}, {target_mean[1]:<6.4}] '
-                        f'Epsilon:{self.epsilon:<6.4}{target_update_msg}')
+            # # Logging
+            # mean_loss = np.mean(losses)
+            # target_update_msg = '  [target updated]' if target_update_flag else ''
+            # # save_msg = '  [checkpoint!]' if checkpoint_flag else ''
+            # logger.info(f'[{self.step}] Loss:{mean_loss:<8.4} Play:{play_steps:<3}  '  # AvgPlay:{self.play_step:<4.3}
+            #             f'RewardSum:{reward_sum:<3} Q:[{q_mean[0]:<6.4}, {q_mean[1]:<6.4}] '
+            #             f'T:[{target_mean[0]:<6.4}, {target_mean[1]:<6.4}] '
+            #             f'Epsilon:{self.epsilon:<6.4}{target_update_msg}')
 
     def optimize(self, gamma: float):
         if self.mode == 'lstm':
@@ -243,8 +323,6 @@ class Brain():
 
         return loss.data.cpu().numpy(), reward_score, q_mean, target_mean
 
-    def _target_update(self):
-        self.target = copy.deepcopy(self.dqn)
 
     def save_checkpoint(self, filename='dqn_checkpoints/checkpoint.pth.tar'):
         dirpath = os.path.dirname(filename)
