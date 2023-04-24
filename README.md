@@ -35,7 +35,7 @@ sudo docker build -t li_sche_pyt . --no-cache
 ```sh
 cd where_you_clone_this_project
 # Run docker
-sudo docker run --mount type=bind,source="$(pwd)"/,target=/workspace -it --gpus all --name li_sche_pyt li_sche_pyt bash
+sudo docker run --mount type=bind,source="$(pwd)"/,target=/workdocker info | grep run grep runspace -it --gpus all --name li_sche_pyt li_sche_pyt bash
 
 # After access container, try cuda driver
 nvidia-smi
