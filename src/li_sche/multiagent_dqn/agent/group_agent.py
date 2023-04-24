@@ -1,6 +1,5 @@
 import argparse
 import copy
-import logging
 import math
 
 from collections import deque
@@ -9,19 +8,15 @@ from collections import namedtuple
 from random import random, randrange
 
 import numpy as np
-import pylab
 import torch
 from PIL import Image
 from torch import nn, optim
-from torch.nn import functional as F
-from torchvision import transforms as T
+import torch.nn.functional as F
 
-from ..algorithm.net import Decide_Grouping, LSTMDQN, ReplayMemory
+from ..algorithm.net import Decide_Grouping
 from .action_space import grouping_action_space
 from ..utils.constants import *
-from ..envs.env import MAX_GROUP, State
-from ..envs.ue import UE
-
+from ..envs.env import MAX_GROUP
 
 class GroupAgent:
 
@@ -63,11 +58,16 @@ class GroupAgent:
         # if self.epsilon > random():
         #     # 1 ~ 4
         #     action = randrange(MAX_GROUP) + 1 
-        #     print(f'e {action}')
         #     return action
-
         
         state_array = torch.as_tensor(state, dtype = torch.float)
-        action = self.net.forward(state_variable = state_array)
-        print(action)
+        action_prob = self.net.forward(state_variable = state_array)
+        action_prob = action_prob.detach().numpy()
+
+        action = 0
+        while action == 0:
+            for i in range(len(action_prob)):
+                if 1 - action_prob[i] < random():
+                    action = i + 1
+        
         return action

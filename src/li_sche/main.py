@@ -3,6 +3,9 @@ import argparse
 from multiagent_dqn.envs.env import Env
 from multiagent_dqn.agent.brain import Brain
 import numpy as np
+import torch
+import torch.nn.functional as F
+
 
 parser = argparse.ArgumentParser(description='DQN Configuration')
 parser.add_argument('--bw', default=400,type=int,help='channel bandwidth in MHz')
@@ -33,6 +36,7 @@ parser: argparse.Namespace = parser.parse_args()
 
 def main(parser: argparse.Namespace):    
     brain = Brain(args = parser)
+
 
     # brain.test_system()
 

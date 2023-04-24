@@ -73,6 +73,7 @@ class Decide_Grouping(nn.Module):
         self.linear2 = nn.Linear(24,24)
         self.linear3 = nn.Linear(24,8)
         self.linear4 = nn.Linear(8, self.n_action)
+        self.softmax = nn.Softmax()
 
 
     def forward(self, state_variable):
@@ -81,20 +82,29 @@ class Decide_Grouping(nn.Module):
         x = self.linear3(x)
         x = self.linear4(x)
 
-        return nn.Softmax(x)
+        y = F.softmax(x, dim = 0)
+        
+        return y
     
-class UE_action(nn.Module):
+class UE_schedule(nn.Module):
     def __init__(self, n_action):
-        super(UE_action, self).__init__()
+        super(UE_schedule, self).__init__()
         self.n_action = n_action
 
         self.encoder = nn.Sequential(
-            nn.Linear(1*2, 8),
-            nn.LeakyReLU(0.02),
+            nn.Linear(12, 8),
+            nn.Sigmoid(),
             nn.Linear(8, 8),
-            nn.LeakyReLU(0.02),
+            nn.Sigmoid(),
         )
+    
+    def set_n(self, n):
+        self.n_action = n
 
+    def forward(self, state_variable):
+        x = self.encoder(state_variable)
+        return x
+    
 
 class LSTMDQN(nn.Module):
     def __init__(self, n_action):

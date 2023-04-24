@@ -196,6 +196,13 @@ class RAN_system(RAN_config):
         ## success_data_map         : { group_id : nrofRB, ...}
         success_data_map = dict()
 
+        for i in range(MAX_GROUP):
+            group_map[i]            = []
+            collision_number_map[i] = 0
+            success_number_map[i]   = 0
+            expect_data_map[i]      = 0
+            success_data_map[i]     = 0
+
         ## Store each ue into map
         for ue in ul_uelist:
             group_id = ue.group

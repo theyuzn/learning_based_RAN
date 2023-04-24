@@ -165,44 +165,46 @@ class Brain():
             real_score = 0
             cum_reward = 0
             done = False
+            counter = 0
 
             while True:
-                
                 action_uelist = list()
                 action_uelist = []
                 nrof_group = 0
+                preprocessed_state : np.ndarray = self.preprocessing(state)
+
                 if state.get_schedule_slot_info() == 'U' and len(state.ul_uelist) > 0:
                     preprocessed_state = self.preprocessing(state)
                     nrof_group = self.grouping_action.select_action(preprocessed_state)
-                    # ue_action : torch.LongTensor = self.ue_action.select_action(preprocessed_state)
-
+                    
                     if nrof_group == 1:
                         for ue in state.ul_uelist:
-                            ue.set_Group(1)
+                            ue.set_Group(0)
                             ue.set_RB(1)
                             action_uelist.append(ue)
                     else:
                         for ue in state.ul_uelist:
-                            ue.set_Group(1)
+                            ue.set_Group(self.ue_action.select_action(preprocessed_state, nrof_group))
                             ue.set_RB(1)
                             action_uelist.append(ue)
-                    break
-                
+                                    
 
                 next_state, reward, done = self.env.step(action_uelist)
                 state = next_state
                 cum_reward += reward
-
-                print(f'{cum_reward} : {nrof_group}')
+                counter += 1
+               
                 # Store the infomation in Replay Memory
-                # next_states = self.recent_states()
-                # if done:
-                #     self.replay.put(state, action, reward, None)
-                # else:
-                #     self.replay.put(state, action, reward, next_states)
+                next_states = self.recent_states()
+                if done:
+                    self.replay.put(preprocessed_state, action_uelist, reward, None)
+                else:
+                    self.replay.put(preprocessed_state, action_uelist, reward, next_states)
 
+
+                print(f'{cum_reward}')
                 # Change States
-                # states = next_states
+                # state = next_states
 
                 # Optimize
                 # if self.replay.is_available():
@@ -238,6 +240,7 @@ class Brain():
                 #         self.save_checkpoint(
                 #             filename=f'dqn_checkpoints/chkpoint_{self.mode}_{self.best_score}.pth.tar')
 
+            break            
             # self._play_steps.append(play_steps)
 
             # Play
@@ -255,12 +258,12 @@ class Brain():
             #             f'Epsilon:{self.epsilon:<6.4}{target_update_msg}')
 
     def optimize(self, gamma: float):
-        if self.mode == 'lstm':
-            # For Optimization
-            self.dqn_hidden_state, self.dqn_cell_state = self.dqn.reset_states(self.dqn_hidden_state,
-                                                                               self.dqn_cell_state)
-            self.target_hidden_state, self.target_cell_state = self.dqn.reset_states(self.target_hidden_state,
-                                                                                     self.target_cell_state)
+        # if self.mode == 'lstm':
+        #     # For Optimization
+        #     self.dqn_hidden_state, self.dqn_cell_state = self.dqn.reset_states(self.dqn_hidden_state,
+        #                                                                        self.dqn_cell_state)
+        #     self.target_hidden_state, self.target_cell_state = self.dqn.reset_states(self.target_hidden_state,
+        #                                                                              self.target_cell_state)
 
         # Get Sample
         transitions = self.replay.sample(BATCH_SIZE)
