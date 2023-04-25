@@ -20,38 +20,33 @@ from torch.nn import functional as F
 from torchvision import transforms as T
 
 
-from .envs.env import Env, MAX_GROUP, State
-from .envs.ue import UE
+from envs.env import Env, MAX_GROUP, State
+from li_sche.multiagent_dqn.agent import Agent, Joint_Action
+from net.brain import ReplayMemory
 
 
 class Brain():
     ### Init
     def __init__(self, args: argparse.Namespace, cuda = True, action_repeat: int = 4):
         self.action_repeat = action_repeat
-        # self.replay = ReplayMemory(capacity = 50000)
-        self._state_buffer = deque(maxlen = self.action_repeat)
+        self.memory = ReplayMemory(capacity = 50000)
+
         # Environment
         self.env = Env(args=args)
         self.step = 0
-        # Agents
-        # self.grouping_action = GroupAgent(args=args)
-        # self.ue_action = UEAgent(args=args)
-        self.device = torch.device("cuda")
+
+        # Agent
+        self.agent = Agent(args = args, cuda=True, action_repeat=self.action_repeat)
 
  
     ### Get initial states
     def get_initial_states(self):
         state = self.env.reset()
-        processed_state = self.preprocessing(state)
-        states = np.stack([processed_state for _ in range(self.action_repeat)], axis=0)
-        self._state_buffer = deque(maxlen = self.action_repeat)
-        for _ in range(self.action_repeat):
-            self._state_buffer.append(processed_state)
-        return states
+        return state
     
     ########################## Replay buffer ##########################
-    def add_state(self, state):
-        self._state_buffer.append(state)
+    def store_state(self, state):
+        self.memory.push(state)
 
     def recent_states(self):
         return self._state_buffer
@@ -84,68 +79,6 @@ class Brain():
 
 
 
-
-    ########################## Preprocessing ##########################
-    def preprocessing(self, state : State):
-        if len(state.ul_uelist) < 1:
-            return np.empty(0)
-        
-        STEP = 0.2 # For 20% step in range
-        nrofULUE = len(state.ul_uelist)
-        state_ndarray = np.zeros(12)
-        data_size_ndarray = np.zeros(nrofULUE)
-        delay_bound_ndarray = np.zeros(nrofULUE)
-        ue : UE
-        state_idx = 0
-        total_size = 0
-
-        ### Initial all the data
-        i = 0
-        for ue in state.ul_uelist :
-            data_size_ndarray[i] = ue.sizeOfData
-            total_size += ue.sizeOfData
-            delay_bound_ndarray[i] = ue.delay_bound
-            i += 1
-
-        state_ndarray[state_idx] = nrofULUE
-        state_idx += 1
-        state_ndarray[state_idx] = total_size
-        state_idx += 1
-        
-        data_size_ndarray.sort(axis=0, kind='mergesort')
-        size_top = data_size_ndarray[nrofULUE - 1]
-        size_bottom = data_size_ndarray[0]
-        size_range = size_top - size_bottom
-
-        step = 0.2
-        for size in data_size_ndarray:
-            while size > size_range*step + size_bottom:
-                state_idx +=1
-                step += STEP
-            state_ndarray[state_idx] += 1
-            
-        state_idx += 1
-
-        delay_bound_ndarray.sort(axis=0, kind='mergesort')
-        delay_top = delay_bound_ndarray[nrofULUE - 1]
-        delay_bottom = delay_bound_ndarray[0]
-        delay_range = delay_top - delay_bottom
-
-        step = 0.2
-        for delay in delay_bound_ndarray:
-            while delay > delay_range*step + delay_bottom:
-                state_idx +=1
-                step += STEP
-            state_ndarray[state_idx] += 1
-        state_idx += 1
-
-        ### Return the processed state array
-        return state_ndarray
-    ###################################################################
-
-
-
-
     def DL_slot(self):
         return
 
@@ -153,7 +86,6 @@ class Brain():
     def Special_slot(self):
         return
     
-
 
 
     ############################ Training #############################
@@ -180,49 +112,30 @@ class Brain():
                 ## state is used to check which the schedule slot is. Ex: 'D', 'U', 'S'
                 ## preprocessed_state is processed state, type : np.ndarray
                 schudule_slot_info = state.get_schedule_slot_info()
-                preprocessed_state : np.ndarray = self.preprocessing(state)
-
-                nrof_group = 0          # The decision of number of group
-                action_uelist = []      # The action list of UL UEs
+                joint_action : Joint_Action = Joint_Action()
 
                 match schudule_slot_info:
                     case 'D':
                         # skip
-                        self.DL_slot()
+                        joint_action = self.DL_slot()
                     case 'S':
                         # skip
-                        self.Special_slot()
+                        joint_action = self.Special_slot()
                     case 'U':
-                        if len(state.ul_uelist) > 0:
-                            nrof_group = self.grouping_action.select_action(preprocessed_state)
-                            ## All UE are scheduled
-                            if nrof_group == 1:
-                                for ue in state.ul_uelist:
-                                    ue.set_Group(0)
-                                    ue.set_RB(1)
-                                    action_uelist.append(ue)
-                            
-                            ## Except group#0, all of other groups are set to contention 
-                            else:
-                                for ue in state.ul_uelist:
-                                    group_index = self.ue_action.dicision_action(preprocessed_state, nrof_group)
-                                    ue.set_RB(1)
-                                    action_uelist.append(ue)
+                        joint_action = self.agent.select_action(state=state)
                 
-                next_state, reward, done = self.env.step(action_uelist)
-                self.add_state(self.preprocessing(next_state))
-                reward_sum += reward
-               
-                # Store the infomation in Replay Memory
-                next_states = self.recent_states()
-
+                next_state, reward, done = self.env.step(joint_action)
+                
                 if done:
-                    self.replay.put(preprocessed_state, action_uelist, reward, None)
+                    self.memory.push(state, joint_action, reward, None)
                 else:
-                    self.replay.put(preprocessed_state, action_uelist, reward, next_states)
-
+                    self.memory.push(state, joint_action, reward, next_state)
+                
+                reward_sum += reward
+           
                 # Change States
                 state = next_state
+                
 
                 # Optimize
                 # if self.replay.is_available():

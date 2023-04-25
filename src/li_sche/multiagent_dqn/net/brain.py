@@ -7,7 +7,8 @@ from collections import deque
 from collections import namedtuple
 from random import random, sample
 
-from agents import MAX_GROUP
+from li_sche.multiagent_dqn.agent import MAX_GROUP
+from ..agent import Joint_Action, State
 
 # Training
 BATCH_SIZE = 32
@@ -33,15 +34,11 @@ LEARNING_RATE = 0.0001
 class ReplayMemory(object):
     def __init__(self, capacity=REPLAY_MEMORY):
         self.capacity = capacity
-        self.memory = deque(maxlen=self.capacity)
+        self.memory = deque([], maxlen=self.capacity)
         self.Transition = namedtuple('Transition', ('state', 'action', 'reward', 'next_state'))
         self._available = False
 
-    def put(self, state: np.array, action: torch.LongTensor, reward: np.array, next_state: np.array):
-        state = torch.FloatTensor(state)
-        reward = torch.FloatTensor([reward])
-        if next_state is not None:
-            next_state = torch.FloatTensor(next_state)
+    def push(self, state: State, action: Joint_Action, reward: int, next_state: State):
         transition = self.Transition(state=state, action=action, reward=reward, next_state=next_state)
         self.memory.append(transition)
 
@@ -55,7 +52,6 @@ class ReplayMemory(object):
     def is_available(self):
         if self._available:
             return True
-
         if len(self.memory) > BATCH_SIZE:
             self._available = True
         return self._available
@@ -85,6 +81,21 @@ class ReplayMemory(object):
 #         x = self.fc3(x)
 #         return x
 
+class Shared_DQN(nn.Module):
+    def __init__(self, n):
+        super(Shared_DQN, self).__init__()
+        self.linear = nn.Sequential(
+            nn.Linear(12,128),
+            nn.ReLU(),
+            nn.Linear(128,128),
+            nn.ReLU(),
+            nn.Linear(128,4),
+            nn.ReLU()
+        ) 
+
+    def forward(self, state):
+        return self.linear(state)
+
 class Resource_DQN(nn.Module):
     def __init__(self, n):
         super(Resource_DQN, self).__init__()
@@ -104,7 +115,7 @@ class MCS_DQN(nn.Module):
     def __init__(self, n):
         super(Resource_DQN, self).__init__()
         self.linear = nn.Sequential(
-            nn.Linear(12,128),
+            nn.Linear(13,128),
             nn.ReLU(),
             nn.Linear(128,32),
             nn.Linear(32,n)
@@ -120,7 +131,7 @@ class UE_Classification_DQN(nn.Module):
     def __init__(self, n):
         super(Resource_DQN, self).__init__()
         self.linear = nn.Sequential(
-            nn.Linear(13,128),
+            nn.Linear(16,128),
             nn.ReLU(),
             nn.Linear(128,32),
             nn.Linear(32,n)
