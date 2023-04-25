@@ -7,6 +7,8 @@ from collections import deque
 from collections import namedtuple
 from random import random, sample
 
+from agents import MAX_GROUP
+
 # Training
 BATCH_SIZE = 32
 
@@ -83,67 +85,48 @@ class ReplayMemory(object):
 #         x = self.fc3(x)
 #         return x
 
-class DQN(nn.Module):
-    def __init__(self, n_action):
-        super(DQN, self).__init__()
-        self.n_action = n_action
-
-        self.linear1 = nn.Linear(12,24)
-        self.linear2 = nn.Linear(24,24)
-        self.linear3 = nn.Linear(24,8)
-        self.linear4 = nn.Linear(8, self.n_action)
-        self.softmax = nn.Softmax()
-
+class Resource_DQN(nn.Module):
+    def __init__(self, n):
+        super(Resource_DQN, self).__init__()
+        self.linear = nn.Sequential(
+            nn.Linear(12,128),
+            nn.ReLU(),
+            nn.Linear(128,32),
+            nn.Linear(32,n)
+        )
 
     def forward(self, state):
-        x = self.linear1(state_variable)
-        x = self.linear2(x)
-        x = self.linear3(x)
-        x = self.linear4(x)
-
+        x = self.linear(state)
         y = F.softmax(x, dim = 0)
-        
         return y
     
-class UE_schedule(nn.Module):
-    def __init__(self, n_action):
-        super(UE_schedule, self).__init__()
-        self.n_action = n_action
-
-        self.encoder = nn.Sequential(
-            nn.Linear(12, 8),
-            nn.Sigmoid(),
-            nn.Linear(8, 8),
-            nn.Sigmoid(),
-            nn.Linear(8, 1),
-            nn.Sigmoid()
+class MCS_DQN(nn.Module):
+    def __init__(self, n):
+        super(Resource_DQN, self).__init__()
+        self.linear = nn.Sequential(
+            nn.Linear(12,128),
+            nn.ReLU(),
+            nn.Linear(128,32),
+            nn.Linear(32,n)
         )
 
-        self.decoder = nn.Sequential(
-            nn.Linear(13, 24),
-            nn.Linear(24, 64),
-            nn.Linear(64, 64),
-            nn.Linear(64, self.n_action),
-        )
+    def forward(self, state):
+        x = self.linear(state)
+        y = F.softmax(x, dim = 0)
+        return y
     
-    def set_n(self, n):
-        self.n_action = n
 
-    def forward(self, state_variable):
-        ## To decide perform contention or scheduling ##
-        x = self.encoder(state_variable)
+class UE_Classification_DQN(nn.Module):
+    def __init__(self, n):
+        super(Resource_DQN, self).__init__()
+        self.linear = nn.Sequential(
+            nn.Linear(13,128),
+            nn.ReLU(),
+            nn.Linear(128,32),
+            nn.Linear(32,n)
+        )
 
-        ## Processor
-        x = x.detach().numpy()[0]
-        if x < 0.5:
-            x = 0
-        else:
-            x = 1
-        state_variable = state_variable.detach().numpy()
-        state_variable = np.append(state_variable, x)
-        state_variable = torch.as_tensor(state_variable, dtype = torch.float)
-
-        ## To decide which group index ##
-        y = self.decoder(state_variable) # Tensor
-        y = F.softmax(y, dim = 0)
-        return x, y
+    def forward(self, state):
+        x = self.linear(state)
+        y = F.softmax(x, dim = 0)
+        return y
