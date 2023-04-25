@@ -8,38 +8,6 @@ from collections import namedtuple
 from random import random, sample
 from .constant import *
 
-
-class ReplayMemory(object):
-    def __init__(self, capacity=REPLAY_MEMORY):
-        self.capacity = capacity
-        self.memory = deque(maxlen=self.capacity)
-        self.Transition = namedtuple('Transition', ('state', 'action', 'reward', 'next_state'))
-        self._available = False
-
-    def put(self, state: np.array, action: torch.LongTensor, reward: np.array, next_state: np.array):
-        state = torch.FloatTensor(state)
-        reward = torch.FloatTensor([reward])
-        if next_state is not None:
-            next_state = torch.FloatTensor(next_state)
-        transition = self.Transition(state=state, action=action, reward=reward, next_state=next_state)
-        self.memory.append(transition)
-
-    def sample(self, batch_size):
-        transitions = sample(self.memory, batch_size)
-        return self.Transition(*(zip(*transitions)))
-
-    def size(self):
-        return len(self.memory)
-
-    def is_available(self):
-        if self._available:
-            return True
-
-        if len(self.memory) > BATCH_SIZE:
-            self._available = True
-        return self._available
-
-
 ### Torch example
 class Net(nn.Module):
     def __init__(self):
@@ -96,15 +64,38 @@ class UE_schedule(nn.Module):
             nn.Sigmoid(),
             nn.Linear(8, 8),
             nn.Sigmoid(),
+            nn.Linear(8, 1),
+            nn.Sigmoid()
+        )
+
+        self.decoder = nn.Sequential(
+            nn.Linear(13, 24),
+            nn.Linear(24, 64),
+            nn.Linear(64, 64),
+            nn.Linear(64, self.n_action),
         )
     
     def set_n(self, n):
         self.n_action = n
 
     def forward(self, state_variable):
+        ## To decide perform contention or scheduling ##
         x = self.encoder(state_variable)
-        return x
-    
+
+        ## Processor
+        x = x.detach().numpy()[0]
+        if x < 0.5:
+            x = 0
+        else:
+            x = 1
+        state_variable = state_variable.detach().numpy()
+        state_variable = np.append(state_variable, x)
+        state_variable = torch.as_tensor(state_variable, dtype = torch.float)
+
+        ## To decide which group index ##
+        y = self.decoder(state_variable) # Tensor
+        y = F.softmax(y, dim = 0)
+        return x, y
 
 class LSTMDQN(nn.Module):
     def __init__(self, n_action):

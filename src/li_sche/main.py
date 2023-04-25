@@ -30,12 +30,14 @@ parser.add_argument('--skip_action', default=4, type=int, help='Skipping actions
 parser.add_argument('--record', dest='record', action='store_true', help='Record playing a game')
 parser.add_argument('--inspect', dest='inspect', action='store_true', help='Inspect CNN')
 parser.add_argument('--seed', default=111, type=int, help='random seed')
+parser.add_argument('--repeat', default = 4, type = int, help = 'The LSTM model')
 parser.set_defaults(clip=True, load_latest=True, record=False, inspect=False)
 parser: argparse.Namespace = parser.parse_args()
 
 
 def main(parser: argparse.Namespace):    
-    brain = Brain(args = parser)
+    repeat_action = parser.repeat
+    brain = Brain(args = parser, cuda = True, action_repeat = repeat_action)
 
 
     # brain.test_system()

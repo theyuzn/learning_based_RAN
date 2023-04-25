@@ -49,16 +49,15 @@ class GroupAgent:
         self.epsilon = EPSILON_START
 
 
-
     def select_action(self, state: np.ndarray) -> tuple:
         # Decrease epsilon value
         self.epsilon = EPSILON_END + (EPSILON_START - EPSILON_END) * math.exp(-1. * self.step / EPSILON_DECAY)
 
         # Randomly select a grouping number
-        # if self.epsilon > random():
-        #     # 1 ~ 4
-        #     action = randrange(MAX_GROUP) + 1 
-        #     return action
+        if self.epsilon > random():
+            # 1 ~ 4
+            action = randrange(MAX_GROUP) + 1 
+            return action
         
         state_array = torch.as_tensor(state, dtype = torch.float)
         action_prob = self.net.forward(state_variable = state_array)
@@ -69,5 +68,4 @@ class GroupAgent:
             for i in range(len(action_prob)):
                 if 1 - action_prob[i] < random():
                     action = i + 1
-        
         return action

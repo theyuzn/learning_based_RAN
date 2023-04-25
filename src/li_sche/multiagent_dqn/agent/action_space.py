@@ -68,32 +68,3 @@ class mcs_action_space:
     
     def get_dimension(self):
         return self.n
-    
-
-class Result:
-    def __init__(self, group_id = 0,ul_uelist = [], nrofRB = 0, mcs = 10):
-        self.group_id = group_id
-        self.ul_uelist = ul_uelist
-        self.nrofRB = nrofRB
-        self.mcs = mcs
-
-    def add_UE(self, ue : UE):
-        self.ul_uelist.appen(ue)
-
-    def set_mcs(self, mcs : int):
-        self.mcs = mcs
-
-    def set_RB(self, nrofRB):
-        self.nrofRB = nrofRB
-
-    def get_id(self):
-        return self.group_id
-
-    def get_ul_uelist(self):
-        return self.ul_uelist
-    
-    def get_RB(self):
-        return self.nrofRB
-    
-    def get_mcs(self):
-        return self.mcs

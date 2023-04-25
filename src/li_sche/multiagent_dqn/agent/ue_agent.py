@@ -52,7 +52,7 @@ class UEAgent:
 
 
 
-    def select_action(self, state: np.ndarray, nrof_group : int) -> tuple:
+    def dicision_action(self, state: np.ndarray, nrof_group : int) -> tuple:
         # Decrease epsilon value
         self.epsilon = EPSILON_END + (EPSILON_START - EPSILON_END) * math.exp(-1. * self.step / EPSILON_DECAY)
 
@@ -61,8 +61,17 @@ class UEAgent:
             action = randrange(nrof_group)
             return action
         
-        state_array = torch.as_tensor(state, dtype = torch.float)
         self.net.set_n(nrof_group)
-        action = self.net.forward(state_variable = state_array)
-        print(f'ueueueue {action}')
+        state_array = torch.as_tensor(state, dtype = torch.float)
+        x, y = self.net.forward(state_variable = state_array)
+        action_prob = y.detach().numpy()
+
+        action = 0
+        while action == 0:
+            for i in range(len(action_prob)):
+                if 1 - action_prob[i] < random():
+                    action = i # group index
+        action = action * x
         return action
+    
+
