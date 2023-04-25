@@ -5,14 +5,15 @@ from envs.ue import UE
 from envs.env import State
 from net.brain import *
 from random import randrange
+from envs.env import Env
 
 MAX_GROUP = 4   # 1 ~ 4 groups
 MAX_MCS_INDEX = 29 # 0 ~ 28
 
 class Resource:
     def __init__(self, group_id : int, mcs : int):
-        self.group_id = 0
-        self.mcs = 0
+        self.group_id = group_id
+        self.mcs = mcs
 
 class Resource_Action:
     def __init__(self):
@@ -83,16 +84,8 @@ This study uses two agents : 1. Resource_Agnet 2. UE_Agent
 class Agent():
     def __init__(self, args: argparse.Namespace, cuda = True, action_repeat: int = 4):
         self.args = args
-        self.clip: bool = args.clip
         self.seed: int = args.seed
         self.action_repeat: int = action_repeat
-        self.frame_skipping: int = args.skip_action
-        self._state_buffer = deque(maxlen=self.action_repeat)
-        self.step = 0
-        self.best_score = args.best or -10000
-        self.best_count = 0
-        self._play_steps = deque(maxlen=5)
-
         if cuda:
             self.device = torch.device("cuda")
 
@@ -100,8 +93,16 @@ class Agent():
         torch.manual_seed(args.seed)
         torch.cuda.manual_seed(args.seed)
         np.random.seed(args.seed)
+
+        # Common
+        self.resource_memory = ReplayMemory(capacity = 50000)
+        self.ue_memory = ReplayMemory(capacity = 50000)
+        self.mcs_memory = ReplayMemory(capacity = 50000)
         self.epsilon = EPSILON_START
 
+        # Environment
+        self.env = Env(args=args)
+        self.step = 0
 
         # Action space
         self.resource_action = Resource_Action()
@@ -113,8 +114,10 @@ class Agent():
         # self.shared_target_net      = Shared_DQN().to(self.device)
         self.resource_policy_net    = Resource_DQN(self.action_space.get_dim()).to(self.device)
         self.resource_target_net    = Resource_DQN(self.action_space.get_dim()).to(self.device)
+
         self.ue_policy_net          = UE_Classification_DQN(self.ue_action.get_dim()).to(self.device)
         self.ue_target_net          = UE_Classification_DQN(self.ue_action.get_dim()).to(self.device)
+
         self.mcs_policy_net         = MCS_DQN(self.mcs_action.get_dim()).to(self.device)
         self.mcs_target_net         = MCS_DQN(self.mcs_action.get_dim()).to(self.device)
 
@@ -124,7 +127,7 @@ class Agent():
         self.mcs_optimizer = optim.AdamW(self.mcs_policy_net.parameters(), lr=LEARNING_RATE, amsgrad = True)
 
 
-     ########################## Preprocessing ##########################
+    ########################## Preprocessing ##########################
     def preprocessing(self, state : State):
         if len(state.ul_uelist) < 1:
             return np.empty(0)
@@ -182,64 +185,173 @@ class Agent():
         return state_ndarray
     ###################################################################
 
+    def DL_slot(self):
+        return
 
-    def select_action(self, state: State, step) -> Joint_Action:
-        self.step = step
-        joint_action = Joint_Action()
-        self.epsilon = EPSILON_END + (EPSILON_START - EPSILON_END) * math.exp(-1. * self.step / EPSILON_DECAY)
-
-        resources = []
-        # Randomly select a grouping number
+    def Special_slot(self):
+        return
+    
+    # input processed state with 12 variable
+    def resource_select_action(self, state : np.ndarray):
         if self.epsilon > random():
-            # Group number
             nrofGroup = randrange(MAX_GROUP)# 1 ~ 4
-
-            # UE
-            for i in range(len(state.ul_uelist)):
-                group_id = randrange(nrofGroup)
-                state.ul_uelist[i].set_group(group_id)
-
-            # MCS
-            for i in range(nrofGroup):
-                mcs = randrange(MAX_MCS_INDEX)
-                res = Resource(group_id=i, mcs=mcs)
-                resources.append(mcs)
-            
-            joint_action.set_action(nrofGroup=nrofGroup, resource_allocation=resources, ul_uelist=state.ul_uelist)
-            return joint_action
-        
+            return nrofGroup
         else:
-            processed_state = self.preprocessing(state=state)
-            # Group number
-            state_tensor = torch.as_tensor(processed_state, dtype = torch.float)
+            state_tensor = torch.as_tensor(state, dtype = torch.float)
             action_prob = self.resource_policy_net.forward(state = state_tensor)
             nrofGroup = torch.multinomial(action_prob, 1) + 1   # 1 ~ 4
+            return nrofGroup
 
-            # UE
-            for i in range(len(state.ul_uelist)):
-                processed_state = np.append(processed_state, nrofGroup)
-                ue_processed_state = np.append(processed_state, state.ul_uelist[i].sizeOfData)
-                ue_processed_state = np.append(ue_processed_state, state.ul_uelist[i].delay_bound)
-                ue_processed_state = np.append(ue_processed_state, state.ul_uelist[i].errorrate)
-                ue_state_tensor = torch.as_tensor(ue_processed_state, dtype = torch.float)
-                ue_action = self.ue_policy_net.forward(state = ue_state_tensor)
-                group_id = torch.multinomial(ue_action, 1) # 0 ~ nrofGroup - 1
-                while group_id > nrofGroup - 1:
-                    group_id = torch.multinomial(ue_action, 1) # 0 ~ nrofGroup - 1
-                state.ul_uelist[i].set_Group(group_id)
 
-            # MCS
-            for i in range(nrofGroup):
-                mcs_state_tensor = torch.as_tensor(processed_state, dtype = torch.float)
-                mcs_action = self.mcs_policy_net.forward(state = mcs_state_tensor)
-                mcs = torch.multinomial(mcs_action, 1)
-                resources.append(mcs)
+    def ue_select_action(self, state : np.ndarray):
+        if self.epsilon > random():
+            group_id = randrange(state[12])
+            return group_id
+        else:
+            state_tensor = torch.as_tensor(state, dtype = torch.float)
+            action_prob = self.ue_policy_net.forward(state = state_tensor)
+            group_id = torch.multinomial(action_prob, 1)
+            return group_id
+    
+    def mcs_select_action(self, state : np.ndarray):
+        if self.epsilon > random():
+            mcs = randrange(MAX_MCS_INDEX)
+            return mcs
+        else:
+            state_tensor = torch.as_tensor(state, dtype = torch.float)
+            action_prob = self.mcs_policy_net.forward(state = state_tensor)
+            mcs = torch.multinomial(action_prob, 1)
+            return mcs
+        
 
-            joint_action.set_action(nrofGroup= nrofGroup, resource_allocation= resources, ul_uelist= state.ul_uelist)
-            return joint_action
+    def train(self, gamma : float = 0.99):
+        # Initial States
+        reward_sum = 0.
+        q_mean = [0., 0.]
+        target_mean = [0., 0.]
+
+        while True:
+            ### states is an np.stack which stores preprocessed state -- np.ndarray
+            # states : np.ndarray = self.get_initial_states()
+            state : State =  self.env.reset()
+            cumulated_reward = 0
+            losses = []
+            target_update_flag = False
+            play_flag = False
+            play_steps = 0
+            real_play_count = 0
+            real_score = 0
+            done = False
+
+
+            previous_ue_state : np.ndarray
+            previous_ue_state_id : int
+            previous_mcs_state : np.ndarray
+            while True:        
+                ## state is used to check which the schedule slot is. Ex: 'D', 'U', 'S'
+                ## preprocessed_state is processed state, type : np.ndarray
+                schudule_slot_info = state.get_schedule_slot_info()
+                ul_uelist = state.ul_uelist
+                state = self.preprocessing(state)
+                joint_action : Joint_Action = Joint_Action()
+                
+
+                match schudule_slot_info:
+                    case 'D':
+                        # skip
+                        joint_action = self.DL_slot()
+                    case 'S':
+                        # skip
+                        joint_action = self.Special_slot()
+                    case 'U':
+                        self.epsilon = EPSILON_END + (EPSILON_START - EPSILON_END) * math.exp(-1. * self.step / EPSILON_DECAY)
+
+                        # Resource
+                        nrofGroup = self.resource_select_action(state = state)
+
+                        # UE
+                        ue_state = np.append(state, nrofGroup)
+                        sample_id = randrange(len(ul_uelist))
+                        group_data = np.zeros(nrofGroup)
+                        group_delay_min = np.zeros(nrofGroup)
+                        for i in range(len(ul_uelist)):
+                            each_ue_state = np.append(ue_state, ul_uelist[i].sizeOfData)
+                            each_ue_state = np.append(each_ue_state, state.ul_uelist[i].delay_bound)
+                            each_ue_state = np.append(each_ue_state, state.ul_uelist[i].errorrate)
+
+                            if i == sample_id:
+                                previous_ue_state = each_ue_state
+                                previous_ue_state_id = ul_uelist[i].id
+
+                            group_id = self.ue_select_action(each_ue_state)
+                            ul_uelist[i].set_Group(group_id)
+
+                            group_data[group_id] += ul_uelist[i].sizeOfData
+                            if group_delay_min[group_id] > ul_uelist[i].delay_bound or group_delay_min[group_id] == 0.:
+                                group_delay_min[group_id] = ul_uelist[i].delay_bound
+                                
+                        # MCS
+                        mcs_state = np.append(state, nrofGroup)
+                        resources = np.zeros(nrofGroup)
+                        for i in range(nrofGroup):
+                            each_mcs_state = np.append(mcs_state, group_data[i])
+                            each_mcs_state = np.append(each_mcs_state, group_delay_min[i])
+                            mcs = self.mcs_select_action(state= each_mcs_state)
+                            resources[i] = mcs
+
+
+                        
+                        joint_action = self.select_action(state=state)
+                
+                next_state, reward, done = self.env.step(joint_action)
+                
+                if done:
+                    self.memory.push(state, joint_action, reward, None)
+                else:
+                    self.memory.push(state, joint_action, reward, next_state)
+                
+                reward_sum += reward
+           
+                # Change States
+                state = next_state
+                
+
+                # Optimize
+                if self.memory.is_available():
+                    loss, reward_sum, q_mean, target_mean = self.optimize(gamma = gamma)
+                    # losses.append(loss[0])
+
+                if done:
+                    break
+
+                # Increase step
+                self.step += 1
+                play_steps += 1             
+            
+            break      
                 
             
-    def optimization(self,  gamma: float = 0.99):
+    def optimize(self,  gamma: float = 0.99):
+
+        # Get Samples : return Transition(*zip(transitions))
+        batch = self.memory.sample(BATCH_SIZE)
+        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=self.device, dtype=torch.bool)
+        non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
+        state_batch = torch.cat(batch.state)
+        action_batch = torch.cat(batch.action)
+        reward_batch = torch.cat(batch.reward)
+
+        # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
+        # columns of actions taken. These are the actions which would've been taken
+        # for each batch state according to policy_net
+        state_action_values = policy_net(state_batch).gather(1, action_batch)
+
+        # Compute V(s_{t+1}) for all next states.
+        # Expected values of actions for non_final_next_states are computed based
+        # on the "older" target_net; selecting their best reward with max(1)[0].
+        # This is merged based on the mask, such that we'll have either the expected
+        # state value or 0 in case the state was final.
+        next_state_values = torch.zeros(BATCH_SIZE, device=self.device)
         return
 
 

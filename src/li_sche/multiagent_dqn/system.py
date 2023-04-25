@@ -28,17 +28,9 @@ from net.brain import ReplayMemory
 class Brain():
     ### Init
     def __init__(self, args: argparse.Namespace, cuda = True, action_repeat: int = 4):
-        self.action_repeat = action_repeat
-        self.memory = ReplayMemory(capacity = 50000)
-
-        # Environment
-        self.env = Env(args=args)
-        self.step = 0
-
         # Agent
-        self.agent = Agent(args = args, cuda=True, action_repeat=self.action_repeat)
+        self.agent = Agent(args = args, cuda=True, action_repeat=action_repeat)
 
- 
     ### Get initial states
     def get_initial_states(self):
         state = self.env.reset()
@@ -79,77 +71,9 @@ class Brain():
 
 
 
-    def DL_slot(self):
-        return
-
-
-    def Special_slot(self):
-        return
-    
-
-
-    ############################ Training #############################
+    ############################# Train ###############################
     def train(self, gamma: float = 0.99):
-        # Initial States
-        reward_sum = 0.
-        q_mean = [0., 0.]
-        target_mean = [0., 0.]
-
-        while True:
-            ### states is an np.stack which stores preprocessed state -- np.ndarray
-            # states : np.ndarray = self.get_initial_states()
-            state : State =  self.env.reset()
-            cumulated_reward = 0
-            losses = []
-            target_update_flag = False
-            play_flag = False
-            play_steps = 0
-            real_play_count = 0
-            real_score = 0
-            done = False
-
-            while True:        
-                ## state is used to check which the schedule slot is. Ex: 'D', 'U', 'S'
-                ## preprocessed_state is processed state, type : np.ndarray
-                schudule_slot_info = state.get_schedule_slot_info()
-                joint_action : Joint_Action = Joint_Action()
-
-                match schudule_slot_info:
-                    case 'D':
-                        # skip
-                        joint_action = self.DL_slot()
-                    case 'S':
-                        # skip
-                        joint_action = self.Special_slot()
-                    case 'U':
-                        joint_action = self.agent.select_action(state=state)
-                
-                next_state, reward, done = self.env.step(joint_action)
-                
-                if done:
-                    self.memory.push(state, joint_action, reward, None)
-                else:
-                    self.memory.push(state, joint_action, reward, next_state)
-                
-                reward_sum += reward
-           
-                # Change States
-                state = next_state
-                
-
-                # Optimize
-                # if self.replay.is_available():
-                    # loss, reward_sum, q_mean, target_mean = self.optimize(gamma = gamma)
-                    # losses.append(loss[0])
-
-                if done:
-                    break
-
-                # Increase step
-                self.step += 1
-                play_steps += 1             
-            
-            break      
+        self.agent.train()
     ###################################################################
 
 
