@@ -12,7 +12,6 @@ from collections import namedtuple
 from random import random, randrange, sample
 
 import numpy as np
-import pylab
 import torch
 from PIL import Image
 from torch import nn, optim
@@ -23,25 +22,20 @@ from torchvision import transforms as T
 
 from .envs.env import Env, MAX_GROUP, State
 from .envs.ue import UE
-from .algorithm.net import *
-from .algorithm.replay_buffer import ReplayMemory
-from .algorithm.constant import *
-from .agent.group_agent import GroupAgent
-from .agent.rb_action import RBAction
-from .agent.ue_agent import UEAgent
+
 
 class Brain():
     ### Init
     def __init__(self, args: argparse.Namespace, cuda = True, action_repeat: int = 4):
         self.action_repeat = action_repeat
-        self.replay = ReplayMemory(capacity = 50000)
+        # self.replay = ReplayMemory(capacity = 50000)
         self._state_buffer = deque(maxlen = self.action_repeat)
         # Environment
         self.env = Env(args=args)
         self.step = 0
         # Agents
-        self.grouping_action = GroupAgent(args=args)
-        self.ue_action = UEAgent(args=args)
+        # self.grouping_action = GroupAgent(args=args)
+        # self.ue_action = UEAgent(args=args)
         self.device = torch.device("cuda")
 
  

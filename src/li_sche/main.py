@@ -1,6 +1,6 @@
 import argparse
 
-from .multiagent_dqn.brain import Brain
+from li_sche.multiagent_dqn.system import Brain
 
 parser = argparse.ArgumentParser(description='Configuration')
 ########################################## RAN parameter ##########################################
