@@ -41,9 +41,9 @@ class GroupAgent:
         self.action_space = grouping_action_space(action = -1, n = MAX_GROUP)
 
         # DQN Model
-        self.net: Decide_Grouping = Decide_Grouping(self.action_space.get_dimension())
+        self.policy_net: Decide_Grouping = Decide_Grouping(self.action_space.get_dimension())
+        self.target_net : Decide_Grouping = Decide_Grouping(self.action_space.get_dimension())
         # self.net.cuda()
-
         self.target: Decide_Grouping = copy.deepcopy(self.net)
         self.optimizer = optim.Adam(self.net.parameters(), lr=LEARNING_RATE)
         self.epsilon = EPSILON_START
@@ -60,7 +60,7 @@ class GroupAgent:
             return action
         
         state_array = torch.as_tensor(state, dtype = torch.float)
-        action_prob = self.net.forward(state_variable = state_array)
+        action_prob = self.policy_net.forward(state_variable = state_array)
         action_prob = action_prob.detach().numpy()
 
         action = 0

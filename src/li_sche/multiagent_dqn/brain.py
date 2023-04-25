@@ -21,14 +21,14 @@ from torch.nn import functional as F
 from torchvision import transforms as T
 
 
-from ..envs.env import Env, MAX_GROUP, State
-from ..envs.ue import UE
-from ..algorithm.net import *
-from ..algorithm.replay_buffer import ReplayMemory
-from ..algorithm.constant import *
-from .group_agent import GroupAgent
-from .rb_action import RBAction
-from .ue_agent import UEAgent
+from .envs.env import Env, MAX_GROUP, State
+from .envs.ue import UE
+from .algorithm.net import *
+from .algorithm.replay_buffer import ReplayMemory
+from .algorithm.constant import *
+from .agent.group_agent import GroupAgent
+from .agent.rb_action import RBAction
+from .agent.ue_agent import UEAgent
 
 class Brain():
     ### Init
@@ -42,6 +42,7 @@ class Brain():
         # Agents
         self.grouping_action = GroupAgent(args=args)
         self.ue_action = UEAgent(args=args)
+        self.device = torch.device("cuda")
 
  
     ### Get initial states
@@ -61,6 +62,8 @@ class Brain():
     def recent_states(self):
         return self._state_buffer
     ###################################################################
+
+
 
     ############################### Test ############################## 
     def test_system(self):
@@ -84,6 +87,9 @@ class Brain():
             slot += 1
             print(f'{state}, {reward}, {done}', end = '\n')
     ###################################################################
+
+
+
 
     ########################## Preprocessing ##########################
     def preprocessing(self, state : State):
@@ -144,6 +150,8 @@ class Brain():
     ###################################################################
 
 
+
+
     def DL_slot(self):
         return
 
@@ -151,7 +159,10 @@ class Brain():
     def Special_slot(self):
         return
     
-    ############################## Train ##############################
+
+
+
+    ############################ Training #############################
     def train(self, gamma: float = 0.99):
         # Initial States
         reward_sum = 0.
@@ -232,76 +243,40 @@ class Brain():
                 play_steps += 1             
             
             break      
-          
     ###################################################################
 
+
+
+    ######################### Optmization #############################
     def optimize(self, gamma: float):
 
         if len(self.replay) < BATCH_SIZE:
             return
 
-        # self.grouping_action.opt()
-        # self.ue_action.opt()
+        # Get Samples : return Transition(*zip(transitions))
+        batch = self.replay.sample(BATCH_SIZE)
+        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=self.device, dtype=torch.bool)
+        non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
+        state_batch = torch.cat(batch.state)
+        action_batch = torch.cat(batch.action)
+        reward_batch = torch.cat(batch.reward)
 
-        # Get Sample
-        transitions = self.replay.sample(BATCH_SIZE)
+        # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
+        # columns of actions taken. These are the actions which would've been taken
+        # for each batch state according to policy_net
+        state_action_values = policy_net(state_batch).gather(1, action_batch)
 
-        # Mask
-        non_final_mask = torch.ByteTensor(list(map(lambda ns: ns is not None, transitions.next_state))).cuda()
-        final_mask = 1 - non_final_mask
+        # Compute V(s_{t+1}) for all next states.
+        # Expected values of actions for non_final_next_states are computed based
+        # on the "older" target_net; selecting their best reward with max(1)[0].
+        # This is merged based on the mask, such that we'll have either the expected
+        # state value or 0 in case the state was final.
+        next_state_values = torch.zeros(BATCH_SIZE, device=self.device)
 
-        state_batch: Variable = Variable(torch.cat(transitions.state).cuda())
-        action_batch: Variable = Variable(torch.cat(transitions.action).cuda())
-        reward_batch: Variable = Variable(torch.cat(transitions.reward).cuda())
-        non_final_next_state_batch = Variable(torch.cat([ns for ns in transitions.next_state if ns is not None]).cuda())
-        non_final_next_state_batch.volatile = True
+       
 
-        # Reshape States and Next States
-        state_batch = state_batch.view([BATCH_SIZE, self.action_repeat, self.env.width, self.env.height])
-        non_final_next_state_batch = non_final_next_state_batch.view([-1, self.action_repeat, self.env.width, self.env.height])
-        non_final_next_state_batch.volatile = True
-
-        # Clipping Reward between -2 and 2
-        reward_batch.data.clamp_(-1, 1)
-
-        # Predict by DQN Model
-        q_pred = self.action_repeat()
-        if self.mode == 'dqn':
-            q_pred = self.dqn(state_batch)
-        elif self.mode == 'lstm':
-            q_pred, self.dqn_hidden_state, self.dqn_cell_state = self.dqn(state_batch, self.dqn_hidden_state,
-                                                                          self.dqn_cell_state)
-
-        q_values = q_pred.gather(1, action_batch)
-
-        # Predict by Target Model
-        target_values = Variable(torch.zeros(BATCH_SIZE, 1).cuda())
-        if self.mode == 'dqn':
-            target_pred = self.target(non_final_next_state_batch)
-        elif self.mode == 'lstm':
-            target_pred, self.target_hidden_state, self.target_cell_state = self.target(non_final_next_state_batch,
-                                                                                        self.target_hidden_state,
-                                                                                        self.target_cell_state)
-
-        target_values[non_final_mask] = reward_batch[non_final_mask] + target_pred.max(1)[0] * gamma
-        target_values[final_mask] = reward_batch[final_mask].detach()
-
-        loss = F.smooth_l1_loss(q_values, target_values)
-
-        # loss = torch.mean((target_values - q_values) ** 2)
-        self.optimizer.zero_grad()
-        loss.backward(retain_variables=True)
-
-        if self.clip:
-            for param in self.dqn.parameters():
-                param.grad.data.clamp_(-1, 1)
-        self.optimizer.step()
-
-        reward_score = int(torch.sum(reward_batch).data.cpu().numpy()[0])
-        q_mean = torch.sum(q_pred, 0).data.cpu().numpy()[0]
-        target_mean = torch.sum(target_pred, 0).data.cpu().numpy()[0]
-
-        return loss.data.cpu().numpy(), reward_score, q_mean, target_mean
+        return 
+    ###################################################################
 
 
     def save_checkpoint(self, filename='dqn_checkpoints/checkpoint.pth.tar'):

@@ -1,13 +1,8 @@
 import argparse
-
-from multiagent_dqn.envs.env import Env
-from multiagent_dqn.agent.brain import Brain
-import numpy as np
-import torch
-import torch.nn.functional as F
-
+from li_sche.multiagent_dqn.brain import Brain
 
 parser = argparse.ArgumentParser(description='DQN Configuration')
+########################################## RAN parameter ##########################################
 parser.add_argument('--bw', default=400,type=int,help='channel bandwidth in MHz')
 parser.add_argument('--mu', default=3, type=int,help='the numerology')
 parser.add_argument('--rb', default=264,type=int,help='number of available RB')
@@ -15,7 +10,7 @@ parser.add_argument('--k0', default=0, type=int, help='k0 parameter')
 parser.add_argument('--k1', default=2, type=int, help='k1 parameter')
 parser.add_argument('--k2', default=4, type=int, help='k2 parameter')
 
-
+########################################## DQN parameter ##########################################
 parser.add_argument('--model', default='dqn', type=str, help='forcefully set step')
 parser.add_argument('--step', default=None, type=int, help='forcefully set step')
 parser.add_argument('--best', default=None, type=int, help='forcefully set best')
@@ -39,11 +34,9 @@ def main(parser: argparse.Namespace):
     repeat_action = parser.repeat
     brain = Brain(args = parser, cuda = True, action_repeat = repeat_action)
 
-
     # brain.test_system()
 
     brain.train()
-
 
 
   
