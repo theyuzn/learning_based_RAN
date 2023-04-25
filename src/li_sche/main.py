@@ -1,7 +1,8 @@
 import argparse
-from li_sche.multiagent_dqn.brain import Brain
 
-parser = argparse.ArgumentParser(description='DQN Configuration')
+from .multiagent_dqn.brain import Brain
+
+parser = argparse.ArgumentParser(description='Configuration')
 ########################################## RAN parameter ##########################################
 parser.add_argument('--bw', default=400,type=int,help='channel bandwidth in MHz')
 parser.add_argument('--mu', default=3, type=int,help='the numerology')
@@ -26,22 +27,40 @@ parser.add_argument('--record', dest='record', action='store_true', help='Record
 parser.add_argument('--inspect', dest='inspect', action='store_true', help='Inspect CNN')
 parser.add_argument('--seed', default=111, type=int, help='random seed')
 parser.add_argument('--repeat', default = 4, type = int, help = 'The LSTM model')
-parser.set_defaults(clip=True, load_latest=True, record=False, inspect=False)
+
+########################################## Exp parameter ##########################################
+parser.add_argument('--test', default=False, type = bool, help='To test the RAN system')
+parser.add_argument('--scheduler', default="Li", help='To indicate the scheduler algorithm')
+
+##########################################  Set default  ##########################################
+parser.set_defaults(test = False, scheduler = "Li")
 parser: argparse.Namespace = parser.parse_args()
 
 
-def main(parser: argparse.Namespace):    
+def main(parser: argparse.Namespace):   
     repeat_action = parser.repeat
-    brain = Brain(args = parser, cuda = True, action_repeat = repeat_action)
+    test = parser.test
+    scheduler = parser.scheduler
+    
+    if test:
+        brain = Brain(args = parser, cuda = True, action_repeat = repeat_action)
+        brain.test_system()
+        return
 
-    # brain.test_system()
+    match scheduler:
 
-    brain.train()
+        ## Perform lightweight scheduler using DQN
+        case "Li":
+            brain = Brain(args = parser, cuda = True, action_repeat = repeat_action)
+            brain.train()
 
-
-  
-
-
+        ## Perform Proportional Fairness algorithm
+        case "PF":
+            return
+        
+        ## Perform Round Robin algorithm
+        case "RR":
+            return
 
 if __name__ == '__main__':
     main(parser)
