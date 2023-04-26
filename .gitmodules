@@ -1,3 +1,0 @@
-[submodule "example/dqn-pytorch"]
-	path = example/dqn-pytorch
-	url = https://github.com/AndersonJo/dqn-pytorch.git
