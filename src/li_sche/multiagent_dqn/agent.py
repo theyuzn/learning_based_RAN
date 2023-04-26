@@ -1,14 +1,45 @@
 import argparse
 import math
+import torch
 
-from envs.ue import UE
-from envs.env import State
-from net.brain import *
+
+from .envs.ue import UE
+from .envs.env import State
+from .net.brain import *
 from random import randrange
-from envs.env import Env
+from .envs.env import Env
+
 
 MAX_GROUP = 4   # 1 ~ 4 groups
 MAX_MCS_INDEX = 29 # 0 ~ 28
+MAX_RB = 248
+
+
+class ReplayMemory(object):
+    def __init__(self, capacity=REPLAY_MEMORY):
+        self.capacity = capacity
+        self.memory = deque([], maxlen=self.capacity)
+        self.Transition = namedtuple('Transition', ('state', 'action', 'reward', 'next_state'))
+        self._available = False
+
+    def push(self, state: torch.Tensor, action: torch.Tensor, reward: torch.Tensor, next_state: torch.Tensor):
+        transition = self.Transition(state=state, action=action, reward=reward, next_state=next_state)
+        self.memory.append(transition)
+
+    def sample(self, batch_size):
+        transitions = sample(self.memory, batch_size)
+        return self.Transition(*(zip(*transitions)))
+
+    def size(self):
+        return len(self.memory)
+
+    def is_available(self):
+        if self._available:
+            return True
+        if len(self.memory) > BATCH_SIZE:
+            self._available = True
+        return self._available
+
 
 class Resource:
     def __init__(self, group_id : int, mcs : int):
@@ -86,8 +117,8 @@ class Agent():
         self.args = args
         self.seed: int = args.seed
         self.action_repeat: int = action_repeat
-        if cuda:
-            self.device = torch.device("cuda")
+        
+        self.device = torch.device("cuda")
 
         # torch init
         torch.manual_seed(args.seed)
@@ -95,9 +126,10 @@ class Agent():
         np.random.seed(args.seed)
 
         # Common
-        self.resource_memory = ReplayMemory(capacity = 50000)
-        self.ue_memory = ReplayMemory(capacity = 50000)
-        self.mcs_memory = ReplayMemory(capacity = 50000)
+        # self.resource_memory = ReplayMemory(capacity = 50000)
+        # self.ue_memory = ReplayMemory(capacity = 50000)
+        # self.mcs_memory = ReplayMemory(capacity = 50000)
+        self.memory = ReplayMemory(capacity=50000)
         self.epsilon = EPSILON_START
 
         # Environment
@@ -105,26 +137,28 @@ class Agent():
         self.step = 0
 
         # Action space
-        self.resource_action = Resource_Action()
-        self.ue_action = UE_Action()
-        self.mcs_action = MCS_Action()
+        # self.resource_action = Resource_Action()
+        # self.ue_action = UE_Action()
+        # self.mcs_action = MCS_Action()
 
         # DQN Model
+        self.shared_rb_policy_net = Shrared_RB_DQN(MAX_RB).to(self.device)
+        self.shared_rb_target_net = Shrared_RB_DQN(MAX_RB).to(self.device)
+        self.shared_rb_target_net.load_state_dict(self.shared_rb_policy_net.state_dict())
         # self.shared_policy_net      = Shared_DQN().to(self.device)
         # self.shared_target_net      = Shared_DQN().to(self.device)
-        self.resource_policy_net    = Resource_DQN(self.action_space.get_dim()).to(self.device)
-        self.resource_target_net    = Resource_DQN(self.action_space.get_dim()).to(self.device)
-
-        self.ue_policy_net          = UE_Classification_DQN(self.ue_action.get_dim()).to(self.device)
-        self.ue_target_net          = UE_Classification_DQN(self.ue_action.get_dim()).to(self.device)
-
-        self.mcs_policy_net         = MCS_DQN(self.mcs_action.get_dim()).to(self.device)
-        self.mcs_target_net         = MCS_DQN(self.mcs_action.get_dim()).to(self.device)
+        # self.resource_policy_net    = Resource_DQN(self.action_space.get_dim()).to(self.device)
+        # self.resource_target_net    = Resource_DQN(self.action_space.get_dim()).to(self.device)
+        # self.ue_policy_net          = UE_Classification_DQN(self.ue_action.get_dim()).to(self.device)
+        # self.ue_target_net          = UE_Classification_DQN(self.ue_action.get_dim()).to(self.device)
+        # self.mcs_policy_net         = MCS_DQN(self.mcs_action.get_dim()).to(self.device)
+        # self.mcs_target_net         = MCS_DQN(self.mcs_action.get_dim()).to(self.device)
 
         # Optimizer
-        self.resource_optimizer = optim.AdamW(self.resource_policy_net.parameters(), lr=LEARNING_RATE, amsgrad = True)
-        self.ue_optimizer = optim.AdamW(self.ue_policy_net.parameters(), lr=LEARNING_RATE, amsgrad = True)
-        self.mcs_optimizer = optim.AdamW(self.mcs_policy_net.parameters(), lr=LEARNING_RATE, amsgrad = True)
+        self.shared_rb_optimizer = optim.AdamW(self.shared_rb_policy_net.parameters(), lr=LEARNING_RATE, amsgrad = True)
+        # self.resource_optimizer = optim.AdamW(self.resource_policy_net.parameters(), lr=LEARNING_RATE, amsgrad = True)
+        # self.ue_optimizer = optim.AdamW(self.ue_policy_net.parameters(), lr=LEARNING_RATE, amsgrad = True)
+        # self.mcs_optimizer = optim.AdamW(self.mcs_policy_net.parameters(), lr=LEARNING_RATE, amsgrad = True)
 
 
     ########################## Preprocessing ##########################
@@ -191,6 +225,20 @@ class Agent():
     def Special_slot(self):
         return
     
+    def sharedRB_select_action(self, state : np.ndarray):
+        self.epsilon = EPSILON_END + (EPSILON_START - EPSILON_END) * math.exp(-1. * self.step / EPSILON_DECAY)
+
+        if not self.epsilon > random():
+            nrofSharedRB = randrange(MAX_RB) # 0 ~ MAX_RB - 1
+            return torch.as_tensor([nrofSharedRB])
+        else:
+            state_tensor = torch.as_tensor(state, dtype = torch.float).to(self.device)
+            print(state_tensor)
+            action_prob = self.shared_rb_policy_net.forward(state = state_tensor)
+            nrofSharedRB = torch.multinomial(action_prob, 1)   # 0 ~ MAX_RB - 1
+            print(f'shfdjksnfkjdsnfkdjsnfkjf {nrofSharedRB}')
+            return nrofSharedRB
+    
     # input processed state with 12 variable
     def resource_select_action(self, state : np.ndarray):
         if self.epsilon > random():
@@ -201,7 +249,6 @@ class Agent():
             action_prob = self.resource_policy_net.forward(state = state_tensor)
             nrofGroup = torch.multinomial(action_prob, 1) + 1   # 1 ~ 4
             return nrofGroup
-
 
     def ue_select_action(self, state : np.ndarray):
         if self.epsilon > random():
@@ -253,62 +300,59 @@ class Agent():
                 schudule_slot_info = state.get_schedule_slot_info()
                 ul_uelist = state.ul_uelist
                 state = self.preprocessing(state)
-                joint_action : Joint_Action = Joint_Action()
-                
+                action = torch.tensor([0]).to(self.device)
 
                 match schudule_slot_info:
                     case 'D':
                         # skip
-                        joint_action = self.DL_slot()
+                        self.DL_slot()
+
                     case 'S':
                         # skip
-                        joint_action = self.Special_slot()
+                        self.Special_slot()
+
                     case 'U':
-                        self.epsilon = EPSILON_END + (EPSILON_START - EPSILON_END) * math.exp(-1. * self.step / EPSILON_DECAY)
-
-                        # Resource
-                        nrofGroup = self.resource_select_action(state = state)
-
-                        # UE
-                        ue_state = np.append(state, nrofGroup)
-                        sample_id = randrange(len(ul_uelist))
-                        group_data = np.zeros(nrofGroup)
-                        group_delay_min = np.zeros(nrofGroup)
-                        for i in range(len(ul_uelist)):
-                            each_ue_state = np.append(ue_state, ul_uelist[i].sizeOfData)
-                            each_ue_state = np.append(each_ue_state, state.ul_uelist[i].delay_bound)
-                            each_ue_state = np.append(each_ue_state, state.ul_uelist[i].errorrate)
-
-                            if i == sample_id:
-                                previous_ue_state = each_ue_state
-                                previous_ue_state_id = ul_uelist[i].id
-
-                            group_id = self.ue_select_action(each_ue_state)
-                            ul_uelist[i].set_Group(group_id)
-
-                            group_data[group_id] += ul_uelist[i].sizeOfData
-                            if group_delay_min[group_id] > ul_uelist[i].delay_bound or group_delay_min[group_id] == 0.:
-                                group_delay_min[group_id] = ul_uelist[i].delay_bound
-                                
-                        # MCS
-                        mcs_state = np.append(state, nrofGroup)
-                        resources = np.zeros(nrofGroup)
-                        for i in range(nrofGroup):
-                            each_mcs_state = np.append(mcs_state, group_data[i])
-                            each_mcs_state = np.append(each_mcs_state, group_delay_min[i])
-                            mcs = self.mcs_select_action(state= each_mcs_state)
-                            resources[i] = mcs
-
-
-                        
-                        joint_action = self.select_action(state=state)
+                        nrofSharedRB = 0
+                        if len(ul_uelist) > 0:
+                            nrofSharedRB = self.sharedRB_select_action(state = state)
+                        action = nrofSharedRB
+                        nrofScheRB = MAX_RB - nrofSharedRB
+                        if nrofSharedRB == 0:
+                            for i in range(len(ul_uelist)):
+                                ul_uelist[i].set_Group(0)
+                        else:
+                            shared_cnt = 0
+                            sche_cnt = 0
+                            for i in range(len(ul_uelist)):
+                                ul_uelist[i].set_RB(1)
+                                if shared_cnt <= nrofSharedRB and sche_cnt < nrofScheRB:
+                                    if ul_uelist[i].delay_bound <= 30:
+                                        ul_uelist[i].set_Group(0)
+                                        sche_cnt += 1
+                                    else:
+                                        ul_uelist[i].set_Group(1)
+                                        shared_cnt += 1
+                                elif shared_cnt <= nrofSharedRB:
+                                    ul_uelist[i].set_Group(1)
+                                    shared_cnt += 1
+                                else:
+                                    ul_uelist[i].set_Group(0)
+                                    sche_cnt += 1
+            
                 
-                next_state, reward, done = self.env.step(joint_action)
-                
-                if done:
-                    self.memory.push(state, joint_action, reward, None)
-                else:
-                    self.memory.push(state, joint_action, reward, next_state)
+                next_state, reward, done = self.env.step(ul_uelist)
+
+                if len(state) > 0:
+                    if done:
+                        self.memory.push( torch.as_tensor(state, dtype = torch.float), 
+                                         action, 
+                                         torch.tensor([reward]), 
+                                         None)
+                    else:
+                        self.memory.push( torch.as_tensor(state, dtype = torch.float), 
+                                         action, 
+                                         torch.tensor([reward]),  
+                                         torch.as_tensor(self.preprocessing(next_state), dtype=torch.float))
                 
                 reward_sum += reward
            
@@ -337,14 +381,14 @@ class Agent():
         batch = self.memory.sample(BATCH_SIZE)
         non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=self.device, dtype=torch.bool)
         non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
-        state_batch = torch.cat(batch.state)
-        action_batch = torch.cat(batch.action)
-        reward_batch = torch.cat(batch.reward)
+        state_batch = torch.cat(batch.state).to(self.device)
+        action_batch = torch.cat(batch.action).to(self.device)
+        reward_batch = torch.cat(batch.reward).to(self.device)
 
         # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
         # columns of actions taken. These are the actions which would've been taken
         # for each batch state according to policy_net
-        state_action_values = policy_net(state_batch).gather(1, action_batch)
+        state_action_values = self.shared_rb_policy_net(state_batch).gather(1, action_batch)
 
         # Compute V(s_{t+1}) for all next states.
         # Expected values of actions for non_final_next_states are computed based

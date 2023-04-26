@@ -1,10 +1,10 @@
 import json
 import os
 import argparse
+import math
 
 from .ue import UE
 from .constant import *
-from ..agent.action_space import *
 import random
 
 ## Constant
@@ -30,7 +30,7 @@ def decode_json(dct):
     return  UE(
                 id              = 0, 
                 sizeOfData      = dct[SIZE],
-                delay_bound     = dct[DELAY],
+                delay_bound     = dct[DELAY]*math.pow(2, 1),
                 window          = dct[WINDOW],
                 service         = dct[SERVICE],
                 nr5QI           = dct[NR5QI],
@@ -45,7 +45,7 @@ class RAN_config:
     def __init__(self, 
                  BW         = 40, 
                  numerology = 1, 
-                 nrofRB     = 106, 
+                 nrofRB     = 248, 
                  k0         = 0,
                  k1         = 2,
                  k2         = 4,
@@ -226,6 +226,7 @@ class RAN_system(RAN_config):
             expect_data_map[group_id] = total_RB * SIZE_PER_RB
 
             # Each UE ramdonly select
+            print(total_RB)
             for i in range(len(group)):
                 if group_id == 0: # The scheduled UE has no need to contention
                     group[i].set_RB_ID(i + 1)

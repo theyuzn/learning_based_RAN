@@ -7,9 +7,6 @@ from collections import deque
 from collections import namedtuple
 from random import random, sample
 
-from li_sche.multiagent_dqn.agent import MAX_GROUP
-from ..agent import Joint_Action, State
-
 # Training
 BATCH_SIZE = 32
 
@@ -30,31 +27,6 @@ CHECKPOINT_INTERVAL = 5000
 PLAY_INTERVAL = 900
 PLAY_REPEAT = 1
 LEARNING_RATE = 0.0001
-
-class ReplayMemory(object):
-    def __init__(self, capacity=REPLAY_MEMORY):
-        self.capacity = capacity
-        self.memory = deque([], maxlen=self.capacity)
-        self.Transition = namedtuple('Transition', ('state', 'action', 'reward', 'next_state'))
-        self._available = False
-
-    def push(self, state: State, action: Joint_Action, reward: int, next_state: State):
-        transition = self.Transition(state=state, action=action, reward=reward, next_state=next_state)
-        self.memory.append(transition)
-
-    def sample(self, batch_size):
-        transitions = sample(self.memory, batch_size)
-        return self.Transition(*(zip(*transitions)))
-
-    def size(self):
-        return len(self.memory)
-
-    def is_available(self):
-        if self._available:
-            return True
-        if len(self.memory) > BATCH_SIZE:
-            self._available = True
-        return self._available
 
 
 ### Torch example
@@ -80,6 +52,24 @@ class ReplayMemory(object):
 #         x = F.relu(self.fc2(x))
 #         x = self.fc3(x)
 #         return x
+
+class Shrared_RB_DQN(nn.Module):
+    def __init__(self,n):
+        super(Shrared_RB_DQN, self).__init__()
+        self.output = n
+        
+        self.linear = nn.Sequential(
+            nn.Linear(12, 128),
+            nn.ReLU(),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Linear(256, self.output)
+        )
+
+    def forward(self, state):
+        x = self.linear(state)
+        y = F.softmax(x, dim = 0)
+        return y
 
 class Shared_DQN(nn.Module):
     def __init__(self, n):

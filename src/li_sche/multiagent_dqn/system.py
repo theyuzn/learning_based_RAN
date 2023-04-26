@@ -20,16 +20,16 @@ from torch.nn import functional as F
 from torchvision import transforms as T
 
 
-from envs.env import Env, MAX_GROUP, State
-from li_sche.multiagent_dqn.agent import Agent, Joint_Action
-from net.brain import ReplayMemory
+from .envs.env import Env, MAX_GROUP, State
+from multiagent_dqn.agent import Agent
 
 
-class Brain():
+class System():
     ### Init
     def __init__(self, args: argparse.Namespace, cuda = True, action_repeat: int = 4):
         # Agent
         self.agent = Agent(args = args, cuda=True, action_repeat=action_repeat)
+        self.env = Env(args = args)
 
     ### Get initial states
     def get_initial_states(self):
@@ -74,39 +74,6 @@ class Brain():
     ############################# Train ###############################
     def train(self, gamma: float = 0.99):
         self.agent.train()
-    ###################################################################
-
-
-
-    ######################### Optmization #############################
-    def optimize(self, gamma: float):
-
-        if len(self.replay) < BATCH_SIZE:
-            return
-
-        # Get Samples : return Transition(*zip(transitions))
-        batch = self.replay.sample(BATCH_SIZE)
-        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=self.device, dtype=torch.bool)
-        non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
-        state_batch = torch.cat(batch.state)
-        action_batch = torch.cat(batch.action)
-        reward_batch = torch.cat(batch.reward)
-
-        # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
-        # columns of actions taken. These are the actions which would've been taken
-        # for each batch state according to policy_net
-        state_action_values = policy_net(state_batch).gather(1, action_batch)
-
-        # Compute V(s_{t+1}) for all next states.
-        # Expected values of actions for non_final_next_states are computed based
-        # on the "older" target_net; selecting their best reward with max(1)[0].
-        # This is merged based on the mask, such that we'll have either the expected
-        # state value or 0 in case the state was final.
-        next_state_values = torch.zeros(BATCH_SIZE, device=self.device)
-
-       
-
-        return 
     ###################################################################
 
 

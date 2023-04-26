@@ -1,6 +1,6 @@
 import argparse
 
-from li_sche.multiagent_dqn.system import Brain
+from multiagent_dqn.system import System
 
 parser = argparse.ArgumentParser(description='Configuration')
 ########################################## RAN parameter ##########################################
@@ -42,17 +42,16 @@ def main(parser: argparse.Namespace):
     test = parser.test
     scheduler = parser.scheduler
     
+    system = System(args = parser, cuda = True, action_repeat = repeat_action)
     if test:
-        brain = Brain(args = parser, cuda = True, action_repeat = repeat_action)
-        brain.test_system()
+        system.test_system()
         return
 
     match scheduler:
 
         ## Perform lightweight scheduler using DQN
         case "Li":
-            brain = Brain(args = parser, cuda = True, action_repeat = repeat_action)
-            brain.train()
+            system.train()
 
         ## Perform Proportional Fairness algorithm
         case "PF":
