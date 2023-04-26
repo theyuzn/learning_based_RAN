@@ -1,6 +1,7 @@
 import argparse
 import math
 import torch
+import logging
 
 
 from .envs.ue import UE
@@ -13,6 +14,16 @@ from .envs.env import Env
 MAX_GROUP = 4   # 1 ~ 4 groups
 MAX_MCS_INDEX = 29 # 0 ~ 28
 MAX_RB = 248
+
+# Logging
+logger = logging.getLogger('DQN')
+logger.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(message)s')
+
+file_handler = logging.FileHandler(f'dqn.log')
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
 
 
 class ReplayMemory(object):
@@ -228,15 +239,13 @@ class Agent():
     def sharedRB_select_action(self, state : np.ndarray):
         self.epsilon = EPSILON_END + (EPSILON_START - EPSILON_END) * math.exp(-1. * self.step / EPSILON_DECAY)
 
-        if not self.epsilon > random():
+        if self.epsilon > random():
             nrofSharedRB = randrange(MAX_RB) # 0 ~ MAX_RB - 1
-            return torch.as_tensor([nrofSharedRB])
+            return torch.as_tensor([[nrofSharedRB]]).to(self.device)
         else:
-            state_tensor = torch.as_tensor(state, dtype = torch.float).to(self.device)
-            print(state_tensor)
+            state_tensor = torch.as_tensor([state], dtype = torch.float).to(self.device)
             action_prob = self.shared_rb_policy_net.forward(state = state_tensor)
             nrofSharedRB = torch.multinomial(action_prob, 1)   # 0 ~ MAX_RB - 1
-            print(f'shfdjksnfkjdsnfkdjsnfkjf {nrofSharedRB}')
             return nrofSharedRB
     
     # input processed state with 12 variable
@@ -300,7 +309,7 @@ class Agent():
                 schudule_slot_info = state.get_schedule_slot_info()
                 ul_uelist = state.ul_uelist
                 state = self.preprocessing(state)
-                action = torch.tensor([0]).to(self.device)
+                action = torch.tensor([[0]]).to(self.device)
 
                 match schudule_slot_info:
                     case 'D':
@@ -353,26 +362,28 @@ class Agent():
                                          action, 
                                          torch.tensor([reward]),  
                                          torch.as_tensor(self.preprocessing(next_state), dtype=torch.float))
-                
-                reward_sum += reward
-           
+                           
                 # Change States
                 state = next_state
-                
 
                 # Optimize
                 if self.memory.is_available():
                     loss, reward_sum, q_mean, target_mean = self.optimize(gamma = gamma)
-                    # losses.append(loss[0])
+                    losses.append(loss)
+
+                # Increase step
+                self.step += 1
 
                 if done:
                     break
 
-                # Increase step
-                self.step += 1
-                play_steps += 1             
-            
-            break      
+            # Logging
+            mean_loss = np.mean(losses)
+            target_update_msg = '[target updated]' if target_update_flag else ''
+            logger.info(f'[{self.step}] Loss:{mean_loss:<8.4}'  
+                        f'RewardSum:{reward_sum:<3} Q:[{q_mean:<6.4}] '
+                        f'T:[{target_mean:<6.4}] '
+                        f'Epsilon:{self.epsilon:<6.4}{target_update_msg}')                
                 
             
     def optimize(self,  gamma: float = 0.99):
@@ -380,7 +391,7 @@ class Agent():
         # Get Samples : return Transition(*zip(transitions))
         batch = self.memory.sample(BATCH_SIZE)
         non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=self.device, dtype=torch.bool)
-        non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
+        non_final_next_states = torch.cat([s for s in batch.next_state if s is not None]).to(self.device)
         state_batch = torch.cat(batch.state).to(self.device)
         action_batch = torch.cat(batch.action).to(self.device)
         reward_batch = torch.cat(batch.reward).to(self.device)
@@ -388,6 +399,7 @@ class Agent():
         # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
         # columns of actions taken. These are the actions which would've been taken
         # for each batch state according to policy_net
+        state_batch = state_batch.view([BATCH_SIZE, 12])
         state_action_values = self.shared_rb_policy_net(state_batch).gather(1, action_batch)
 
         # Compute V(s_{t+1}) for all next states.
@@ -396,7 +408,28 @@ class Agent():
         # This is merged based on the mask, such that we'll have either the expected
         # state value or 0 in case the state was final.
         next_state_values = torch.zeros(BATCH_SIZE, device=self.device)
-        return
+        with torch.no_grad():
+            non_final_next_states = non_final_next_states.view([-1, 12])
+            next_state_values[non_final_mask] = self.shared_rb_target_net(non_final_next_states).max(1)[0]
+        # Compute the expected Q values
+        expected_state_action_values = (next_state_values * gamma) + reward_batch
+
+        # Compute Huber loss
+        criterion = nn.SmoothL1Loss()
+        loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+
+        # Optimize the model
+        self.shared_rb_optimizer.zero_grad()
+        loss.backward()
+        # In-place gradient clipping
+        torch.nn.utils.clip_grad_value_(self.shared_rb_policy_net.parameters(), 100)
+        self.shared_rb_optimizer.step()
+
+        reward_score = int(torch.sum(reward_batch).data.cpu().numpy())
+        q_mean = torch.sum(state_action_values, 0).data.cpu().numpy()[0]
+        target_mean = torch.sum(next_state_values, 0).data.cpu().numpy()
+
+        return loss.data.cpu().numpy(), reward_score, q_mean, target_mean
 
 
 

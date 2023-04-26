@@ -117,9 +117,12 @@ class RAN_system(RAN_config):
 
 
     def init(self):
+        global UE_list
         self.slot = 0
         schedule_slot_info = self._get_slot_info(self.slot + PRE_SCHE_SLOT)
         current_slot_info = self._get_slot_info(self.slot)
+        self.temp_UE_list = UE_list.copy()
+        self.ul_uelist = list()
 
         if current_slot_info == 'U':
             for _ in range(MAX_UPLINK_GRANT):
@@ -226,7 +229,6 @@ class RAN_system(RAN_config):
             expect_data_map[group_id] = total_RB * SIZE_PER_RB
 
             # Each UE ramdonly select
-            print(total_RB)
             for i in range(len(group)):
                 if group_id == 0: # The scheduled UE has no need to contention
                     group[i].set_RB_ID(i + 1)
@@ -309,9 +311,12 @@ class RAN_system(RAN_config):
                     break
 
 
-        if self.slot >= SIMULATION_FRAME * NUMBER_OF_SUBFRAME * pow(2, self.numerology):
+        if self.slot >= SIMULATION_FRAME * NUMBER_OF_SUBFRAME * math.pow(2, self.numerology):
+            print(f"sss {self.slot}  {SIMULATION_FRAME * NUMBER_OF_SUBFRAME * math.pow(2, self.numerology)}")
             self.done = True
         if len(self.temp_UE_list) == 0 and len(self.ul_uelist) == 0:
+            print("ttt")
+            print(f"sss {len(self.temp_UE_list)}  {len(self.ul_uelist)}")
             self.done = True
 
         next_state = State(schedule_slot_info = schedule_slot_info, ul_uelist = self.ul_uelist)
