@@ -123,6 +123,7 @@ class RAN_system(RAN_config):
         current_slot_info = self._get_slot_info(self.slot)
         self.temp_UE_list = UE_list.copy()
         self.ul_uelist = list()
+        self.done = False
 
         if current_slot_info == 'U':
             for _ in range(MAX_UPLINK_GRANT):
@@ -276,7 +277,6 @@ class RAN_system(RAN_config):
 
     def step(self, action:list):
         # To calculate the reward
-            
         current_slot_info = self._get_slot_info(self.slot)
         reward = 0
         match current_slot_info:
@@ -312,11 +312,8 @@ class RAN_system(RAN_config):
 
 
         if self.slot >= SIMULATION_FRAME * NUMBER_OF_SUBFRAME * math.pow(2, self.numerology):
-            print(f"sss {self.slot}  {SIMULATION_FRAME * NUMBER_OF_SUBFRAME * math.pow(2, self.numerology)}")
             self.done = True
         if len(self.temp_UE_list) == 0 and len(self.ul_uelist) == 0:
-            print("ttt")
-            print(f"sss {len(self.temp_UE_list)}  {len(self.ul_uelist)}")
             self.done = True
 
         next_state = State(schedule_slot_info = schedule_slot_info, ul_uelist = self.ul_uelist)
@@ -332,6 +329,7 @@ class Env:
             
     # return initial state
     def init(self):
+        self.action_map = dict()
         return self.ran_system.reset()
 
     ## Action is store in ul_uelist

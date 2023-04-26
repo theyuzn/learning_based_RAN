@@ -290,20 +290,12 @@ class Agent():
             ### states is an np.stack which stores preprocessed state -- np.ndarray
             # states : np.ndarray = self.get_initial_states()
             state : State =  self.env.reset()
-            cumulated_reward = 0
             losses = []
             target_update_flag = False
-            play_flag = False
-            play_steps = 0
-            real_play_count = 0
-            real_score = 0
             done = False
 
 
-            previous_ue_state : np.ndarray
-            previous_ue_state_id : int
-            previous_mcs_state : np.ndarray
-            while True:        
+            while True:       
                 ## state is used to check which the schedule slot is. Ex: 'D', 'U', 'S'
                 ## preprocessed_state is processed state, type : np.ndarray
                 schudule_slot_info = state.get_schedule_slot_info()
@@ -375,6 +367,7 @@ class Agent():
                 self.step += 1
 
                 if done:
+                    print("Done!!")
                     break
 
             # Logging
