@@ -3,28 +3,59 @@ import math
 import torch
 import logging
 import copy
+from collections import namedtuple
+from random import random, sample
+from collections import namedtuple, deque
+import numpy as np
+import torch.optim as optim
+
 
 from .envs.ue import UE
 from .envs.env import State
-from .net.brain import *
+from .net.brain import Regression_DQN
 from random import randrange
 from .envs.env import Env
 
-
+REPLAY_MEMORY = 50000
+BATCH_SIZE = 32
 MAX_GROUP = 4   # 1 ~ 4 groups
 MAX_MCS_INDEX = 29 # 0 ~ 28
 MAX_RB = 248
 TAU = 0.005
+STEP = 0.2
+FEATURES = 3 + 2*(1/STEP) # {N_UE, N_data, Capacity, data_dist, delay_dist}
 
+# Training
+BATCH_SIZE = 32
+
+# Replay Memory
+REPLAY_MEMORY = 50000
+
+# Epsilon
+EPSILON_START = 1.0
+EPSILON_END = 0.01
+EPSILON_DECAY = 100000
+
+# LSTM Memory
+LSTM_MEMORY = 128
+
+# ETC Options
+TARGET_UPDATE_INTERVAL = 1000
+CHECKPOINT_INTERVAL = 5000
+PLAY_INTERVAL = 900
+PLAY_REPEAT = 1
+LEARNING_RATE = 0.0001
+
+MODE_R = "Regression"
+MODE_C = "Classification"
 
 # Logging
 logger = logging.getLogger('DQN')
 logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(message)s')
-file_handler = logging.FileHandler(f'dqn.log')
+file_handler = logging.FileHandler(f'dqn_{STEP}_{MODE_R}.log')
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
-
 
 
 class ReplayMemory(object):
@@ -89,8 +120,8 @@ class Agent():
         self.step = 0
 
         # DQN Model
-        self.shared_rb_policy_net = Shrared_RB_DQN(MAX_RB).to(self.device)
-        self.shared_rb_target_net = Shrared_RB_DQN(MAX_RB).to(self.device)
+        self.shared_rb_policy_net = Regression_DQN(MAX_RB).to(self.device)
+        self.shared_rb_target_net = Regression_DQN(MAX_RB).to(self.device)
         self.shared_rb_target_net.load_state_dict(self.shared_rb_policy_net.state_dict())
 
         # Optimizer
@@ -101,7 +132,6 @@ class Agent():
         if len(state.ul_uelist) < 1:
             return np.empty(0)
         
-        STEP = 0.2 # For 20% step in range
         nrofULUE = len(state.ul_uelist)
         state_ndarray = np.zeros(12)
         data_size_ndarray = np.zeros(nrofULUE)
@@ -187,8 +217,7 @@ class Agent():
             target_update_flag = False
             done = False
 
-
-            while True:       
+            while True:   
                 ## state is used to check which the schedule slot is. Ex: 'D', 'U', 'S'
                 ## preprocessed_state is processed state, type : np.ndarray
                 schudule_slot_info = state.get_schedule_slot_info()
@@ -232,6 +261,11 @@ class Agent():
                                 else:
                                     ul_uelist[i].set_Group(0)
                                     sche_cnt += 1
+
+                        # Increase step 
+                        # Training step is following the UL
+                        # To decay the epsilon
+                        self.step += 1
             
                 next_state, reward, done = self.env.step(ul_uelist)
 
@@ -263,8 +297,6 @@ class Agent():
                     target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
                 self.shared_rb_target_net.load_state_dict(target_net_state_dict)
 
-                # Increase step
-                self.step += 1
 
                 if self.step % TARGET_UPDATE_INTERVAL == 0:
                     self.shared_rb_target_net = copy.deepcopy(self.shared_rb_policy_net)
@@ -277,9 +309,9 @@ class Agent():
             mean_loss = np.mean(losses)
             target_update_msg = '[target updated]' if target_update_flag else ''
             logger.info(f'[{self.step}] Loss:{mean_loss:<8.4}'  
-                        f'RewardSum:{reward_sum:<3} Q:[{q_mean:<6.4}] '
-                        f'T:[{target_mean:<6.4}] '
-                        f'Epsilon:{self.epsilon:<6.4}{target_update_msg}')                
+                        f'  RewardSum:{reward_sum:<3} Q:[{q_mean:<6.4}] '
+                        f'  T:[{target_mean:<6.4}] '
+                        f'  Epsilon:{self.epsilon:<6.4}{target_update_msg}')                
                 
             
     def optimize(self,  gamma: float = 0.99):
