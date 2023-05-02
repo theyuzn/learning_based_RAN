@@ -201,6 +201,11 @@ class Agent():
             action_prob = self.shared_rb_policy_net.forward(state = state_tensor)
             nrofSharedRB = torch.multinomial(action_prob, 1)   # 0 ~ MAX_RB - 1
             return nrofSharedRB
+        
+    
+    def pretrain(self):
+        
+        return
     
 
     def train(self, gamma : float = 0.99):
@@ -318,7 +323,7 @@ class Agent():
 
         # Get Samples : return Transition(*zip(transitions))
         batch = self.memory.sample(BATCH_SIZE)
-        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=self.device, dtype=torch.bool)
+        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), device = self.device, dtype=torch.bool)
         non_final_next_states = torch.cat([s for s in batch.next_state if s is not None]).to(self.device)
         state_batch = torch.cat(batch.state).to(self.device)
         action_batch = torch.cat(batch.action).to(self.device)
