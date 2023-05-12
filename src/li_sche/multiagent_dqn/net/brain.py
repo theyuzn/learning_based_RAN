@@ -12,7 +12,7 @@ from random import random, sample
 class Regression_DQN(nn.Module):
     def __init__(self, features):
         super(Regression_DQN, self).__init__()
-        self.apply(self.init_weights)  # 初始化權重
+        self.apply(self.init_weights)
         self.dropout = torch.nn.Dropout(0.05)
         self.layer1 = nn.Sequential(nn.Linear(features, 32))
         self.layer2 = nn.Sequential(nn.Linear(32, 16))
