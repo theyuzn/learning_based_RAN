@@ -1,49 +1,19 @@
 import argparse
-import copy
-import glob
-import logging
-import math
-import os
-import re
-import sys
-
-from collections import deque
-from collections import namedtuple
-from random import random, randrange, sample
-
-import numpy as np
-import torch
-from PIL import Image
-from torch import nn, optim
-from torch.autograd import Variable
-from torch.nn import functional as F
-from torchvision import transforms as T
-
-
-from .envs.env import Env, MAX_GROUP, State
-from multiagent_dqn.agent import Agent
-
+from random import randrange
+from .envs.env import RAN_system
+from .agent import Agent
 
 class System():
     ### Init
-    def __init__(self, args: argparse.Namespace, cuda = True, action_repeat: int = 4):
+    def __init__(self, args: argparse.Namespace):
         # Agent
-        self.agent = Agent(args = args, cuda=True, action_repeat=action_repeat)
-        self.env = Env(args = args)
+        self.agent = Agent(args = args)
+        self.env = RAN_system(args = args)
 
     ### Get initial states
     def get_initial_states(self):
         state = self.env.reset()
         return state
-    
-    ########################## Replay buffer ##########################
-    def store_state(self, state):
-        self.memory.push(state)
-
-    def recent_states(self):
-        return self._state_buffer
-    ###################################################################
-
 
     ############################### Test ############################## 
     def test_system(self):
@@ -70,49 +40,59 @@ class System():
 
 
     ############################# Train ###############################
-    def train(self, gamma: float = 0.99):
+    def train(self):
         self.agent.train()
     ###################################################################
 
 
-    def save_checkpoint(self, filename='dqn_checkpoints/checkpoint.pth.tar'):
-        dirpath = os.path.dirname(filename)
+    ############################# Train ###############################
+    def PF(self):
+        return
+    ###################################################################
 
-        if not os.path.exists(dirpath):
-            os.mkdir(dirpath)
+    ############################# Train ###############################
+    def RR(self):
+        return
+    ###################################################################
 
-        checkpoint = {
-            'dqn': self.dqn.state_dict(),
-            'target': self.target.state_dict(),
-            'optimizer': self.optimizer.state_dict(),
-            'step': self.step,
-            'best': self.best_score,
-            'best_count': self.best_count
-        }
-        torch.save(checkpoint, filename)
+    # def save_checkpoint(self, filename='dqn_checkpoints/checkpoint.pth.tar'):
+    #     dirpath = os.path.dirname(filename)
 
-    def load_checkpoint(self, filename='dqn_checkpoints/checkpoint.pth.tar', epsilon=None):
-        checkpoint = torch.load(filename)
-        self.dqn.load_state_dict(checkpoint['dqn'])
-        self.target.load_state_dict(checkpoint['target'])
-        self.optimizer.load_state_dict(checkpoint['optimizer'])
-        self.step = checkpoint['step']
-        self.best_score = self.best_score or checkpoint['best']
-        self.best_count = checkpoint['best_count']
+    #     if not os.path.exists(dirpath):
+    #         os.mkdir(dirpath)
 
-    def load_latest_checkpoint(self, epsilon=None):
-        r = re.compile('chkpoint_(dqn|lstm)_(?P<number>-?\d+)\.pth\.tar$')
+    #     checkpoint = {
+    #         'dqn': self.dqn.state_dict(),
+    #         'target': self.target.state_dict(),
+    #         'optimizer': self.optimizer.state_dict(),
+    #         'step': self.step,
+    #         'best': self.best_score,
+    #         'best_count': self.best_count
+    #     }
+    #     torch.save(checkpoint, filename)
 
-        files = glob.glob(f'dqn_checkpoints/chkpoint_{self.mode}_*.pth.tar')
+    # def load_checkpoint(self, filename='dqn_checkpoints/checkpoint.pth.tar', epsilon=None):
+    #     checkpoint = torch.load(filename)
+    #     self.dqn.load_state_dict(checkpoint['dqn'])
+    #     self.target.load_state_dict(checkpoint['target'])
+    #     self.optimizer.load_state_dict(checkpoint['optimizer'])
+    #     self.step = checkpoint['step']
+    #     self.best_score = self.best_score or checkpoint['best']
+    #     self.best_count = checkpoint['best_count']
 
-        if files:
-            files = list(map(lambda x: [int(r.search(x).group('number')), x], files))
-            files = sorted(files, key=lambda x: x[0])
-            latest_file = files[-1][1]
-            self.load_checkpoint(latest_file, epsilon=epsilon)
-            print(f'latest checkpoint has been loaded - {latest_file}')
-        else:
-            print('no latest checkpoint')
+    # def load_latest_checkpoint(self, epsilon=None):
+    #     r = re.compile('chkpoint_(dqn|lstm)_(?P<number>-?\d+)\.pth\.tar$')
+
+    #     files = glob.glob(f'dqn_checkpoints/chkpoint_{self.mode}_*.pth.tar')
+
+    #     if files:
+    #         files = list(map(lambda x: [int(r.search(x).group('number')), x], files))
+    #         files = sorted(files, key=lambda x: x[0])
+    #         latest_file = files[-1][1]
+    #         self.load_checkpoint(latest_file, epsilon=epsilon)
+    #         print(f'latest checkpoint has been loaded - {latest_file}')
+    #     else:
+    #         print('no latest checkpoint')
 
 
     # @property

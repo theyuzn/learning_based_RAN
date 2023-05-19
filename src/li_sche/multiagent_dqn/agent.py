@@ -9,12 +9,11 @@ from collections import namedtuple, deque
 import numpy as np
 import torch.optim as optim
 
-
 from .envs.ue import UE
 from .envs.env import State
 from .net.brain import Regression_DQN
 from random import randrange
-from .envs.env import Env
+from .envs.env import RAN_system
 
 REPLAY_MEMORY = 50000
 BATCH_SIZE = 32
@@ -83,12 +82,6 @@ class ReplayMemory(object):
             self._available = True
         return self._available
 
-class Resource:
-    def __init__(self, group_id : int, mcs : int):
-        self.group_id = group_id
-        self.mcs = mcs
-
-
 '''
 ** Agent
 This agent is to decide the number of shared RB
@@ -99,12 +92,12 @@ This agent is to decide the number of shared RB
     otherwise, the UE will be arranged to perform contention in shared resources.
 '''
 class Agent():
-    def __init__(self, args: argparse.Namespace, cuda = True, action_repeat: int = 4):
+    def __init__(self, args: argparse.Namespace):
         self.args = args
         self.seed: int = args.seed
-        self.action_repeat: int = action_repeat
+        self.action_repeat: int = args.repeat
         
-        self.device = torch.device("cuda")
+        self.device = torch.device("cpu")
 
         # torch init
         torch.manual_seed(args.seed)
@@ -116,7 +109,7 @@ class Agent():
         self.epsilon = EPSILON_START
 
         # Environment
-        self.env = Env(args=args)
+        self.env = RAN_system(args=args)
         self.step = 0
 
         # DQN Model

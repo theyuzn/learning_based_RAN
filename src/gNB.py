@@ -1,8 +1,7 @@
 import argparse
-
-from multiagent_dqn.system import System
+from li_sche.multiagent_dqn.system import System
 import socket
-import utils.pysctp.sctp as sctp
+import li_sche.utils.pysctp.sctp as sctp
 
 parser = argparse.ArgumentParser(description='Configuration')
 ########################################## RAN parameter ##########################################
@@ -33,7 +32,6 @@ parser.add_argument('--repeat', default = 4, type = int, help = 'The LSTM model'
 ########################################## Exp parameter ##########################################
 parser.add_argument('--test', default=False, type = bool, help='To test the RAN system')
 parser.add_argument('--scheduler', default="Li", help='To indicate the scheduler algorithm')
-parser.add_argument('--UE', default = False, help='To indicate the UE thread')
 
 ##########################################  Set default  ##########################################
 parser.set_defaults(test = False, scheduler = "Li")
@@ -41,63 +39,54 @@ parser: argparse.Namespace = parser.parse_args()
 
 
 SERVER_PORT=3333
-SERVER_HOST="127.0.0.1"
+SERVER_HOST="172.17.0.2"
 
-def main(parser: argparse.Namespace):     
+def main(parser: argparse.Namespace):  
 
-    repeat_action = parser.repeat
-    test = parser.test
-    scheduler = parser.scheduler
-    UE = parser.UE
+    # Initial the system
+    system = System(args = parser)
 
-    UE_sock : sctp.sctpsocket_tcp
-    gNB : sctp.sctpsocket_tcp
+    # Create the sctp socket
+    addr = (SERVER_HOST, SERVER_PORT)
+    gNB_sock = sctp.sctpsocket(socket.AF_INET, socket.SOCK_STREAM, None)
+    gNB_sock.initparams.max_instreams = 3
+    gNB_sock.initparams.num_ostreams = 3
+    gNB_sock.bindx([addr])
+    gNB_sock.listen(5)
+    gNB_sock.events.data_io = 1
+    gNB_sock.events.clear()
+
     conn_sock : sctp.sctpsocket_tcp
+    while True:
+        print("Waiting for user connecting")
+        conn_sock, addr = gNB_sock.accept()
+        print(f"connecting: {addr}")
+        break
 
-    if UE:
-        UE_sock = sctp.sctpsocket_tcp(socket.AF_INET)
-        UE_sock.connect((SERVER_HOST, SERVER_HOST))
-    else:
-        addr = (SERVER_HOST, SERVER_PORT)
-        gNB_sock = sctp.sctpsocket(socket.AF_INET, socket.SOCK_STREAM, None)
-        gNB_sock.initparams.max_instreams = 3
-        gNB_sock.initparams.num_ostreams = 3
-        gNB_sock.bindx([addr])
-        gNB_sock.listen(5)
-        gNB_sock.events.data_io = 1
-        gNB_sock.events.clear()
-
-        while True:
-            print("Waiting for user connecting")
-            conn_sock, addr = gNB_sock.accept()
-            print(f"connecting: {addr}")
-            break
-            
-    system = System(args = parser, cuda = True, action_repeat = repeat_action)
-    if test:
-        system.test_system()
-        return
-
+    # Running the system
+    scheduler = parser.scheduler
     match scheduler:
-
+        # Perform testing in the system
+        case "test":
+            system.test_system()
+            return
+        
         ## Perform lightweight scheduler using DQN
         case "Li":
             system.train()
 
         ## Perform Proportional Fairness algorithm
         case "PF":
+            system.PF()
             return
         
         ## Perform Round Robin algorithm
         case "RR":
+            system.RR()
             return
 
-
-    if UE:
-        UE_sock.close()
-    else:
-        conn_sock.close()
-        gNB_sock.close()
+    conn_sock.close()
+    gNB_sock.close()
 
 if __name__ == '__main__':
     main(parser)

@@ -9,6 +9,7 @@ class UE:
                  type,         
                  mcs = 0, 
                  rb_id = -1):
+        
         # ----[==================================]---- #
         # ----[         Common UE Config         ]---- #
         # ----[==================================]---- #
@@ -32,7 +33,7 @@ class UE:
         self.freq_leng = 0              # RB size
         # Proposed DCI msg
         self.contention = False         # Contention flag [0 : schedule; 1 contention]
-        self.RB_size = 0                # The number of RB each contention UE can access
+        self.contention_size = 0        # The number of RB each contention UE can access
         
         # ----[==================================]---- #
         # ----[   Perform Contention Parameter   ]---- #
