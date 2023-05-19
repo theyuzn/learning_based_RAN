@@ -24,7 +24,7 @@ SIZE_PER_RB         = 400
 
 
 ## The global variable to store all the UE info in system ##
-UE_list = []
+Global_UE_list = []
 
 def decode_json(dct):
     return  UE(
@@ -79,36 +79,36 @@ class State :
         return self.schedule_slot_info
 
     def reset(self):
-        global UE_list
-        self.ul_uelist = UE_list
+        global Global_UE_list
+        self.ul_uelist = Global_UE_list
         self.schedule_slot_info = 'D'
  
 
 class RAN_system(RAN_config):
     def __init__(self, args : argparse.Namespace):
         
-        self.slot = 0
-        self.args = args
-        self.done = False
+       
         super(RAN_system, self).__init__(BW = self.args.bw,
                                         numerology = self.args.mu,
                                         nrofRB = self.args.rb,
                                         k0 = self.args.k0,
                                         k1 = self.args.k1,
-                                        k2 = self.args.k2,)
-
-        ## To add UE data to global variable UE_list
-        global UE_list
+                                        k2 = self.args.k2)
         self.slot = 0
-        UE_list = []
+        self.args = args
+        self.done = False
+
+        ## Global variable Global_UE_list
+        global Global_UE_list
+        Global_UE_list = []
         cur_path = os.path.dirname(__file__)
         new_path = os.path.join(cur_path, '../../../data/uedata.json')
         with open(new_path, 'r') as ue_file:
-            UE_list = json.load(ue_file,object_hook=decode_json) 
-        for i in range(len(UE_list)):
-            UE_list[i].id = i + 1
+            Global_UE_list = json.load(ue_file,object_hook=decode_json) 
+        for i in range(len(Global_UE_list)):
+            Global_UE_list[i].id = i + 1
             
-        self.temp_UE_list = UE_list.copy()
+        self.temp_UE_list = Global_UE_list.copy()
         self.ul_uelist = list()
 
     ### Return 'D'; 'S'; 'U'
@@ -117,11 +117,11 @@ class RAN_system(RAN_config):
 
 
     def init(self):
-        global UE_list
+        global Global_UE_list
         self.slot = 0
         schedule_slot_info = self._get_slot_info(self.slot + PRE_SCHE_SLOT)
         current_slot_info = self._get_slot_info(self.slot)
-        self.temp_UE_list = UE_list.copy()
+        self.temp_UE_list = Global_UE_list.copy()
         self.ul_uelist = list()
         self.done = False
 
@@ -321,8 +321,9 @@ class RAN_system(RAN_config):
         return next_state, reward, self.done
         
         
-class Env:
+class Env(State):
     def __init__(self, args : argparse.Namespace):
+        super(State).__init__()
         self.args = args
         self.ran_system = RAN_system(self.args)
         self.action_map = dict()

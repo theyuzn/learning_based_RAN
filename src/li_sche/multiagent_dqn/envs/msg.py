@@ -11,7 +11,8 @@ def DCI():
         self.harq_proc = 0
         self.TCP = 0
         self.SUL_ind = 0
-
+        self.contention = 0
+        self.contention_size = 0
 
 
 # This msg is carried on PUCCH Physical Uplink Control Channel

@@ -1,0 +1,3 @@
+[submodule "src/li_sche/utils/pysctp"]
+	path = src/li_sche/utils/pysctp
+	url = https://github.com/P1sec/pysctp.git
