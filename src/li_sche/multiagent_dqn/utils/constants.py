@@ -1,3 +1,12 @@
+REPLAY_MEMORY = 50000
+BATCH_SIZE = 32
+MAX_GROUP = 4   # 1 ~ 4 groups
+MAX_MCS_INDEX = 29 # 0 ~ 28
+MAX_RB = 248
+TAU = 0.005
+STEP = 0.2
+FEATURES = 3 + 2*(1/STEP) # {N_UE, N_data, Capacity, data_dist, delay_dist}
+
 # Training
 BATCH_SIZE = 32
 
@@ -18,3 +27,6 @@ CHECKPOINT_INTERVAL = 5000
 PLAY_INTERVAL = 900
 PLAY_REPEAT = 1
 LEARNING_RATE = 0.0001
+
+MODE_R = "Regression"
+MODE_C = "Classification"

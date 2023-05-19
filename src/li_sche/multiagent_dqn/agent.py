@@ -14,39 +14,7 @@ from .envs.env import State
 from .net.brain import Regression_DQN
 from random import randrange
 from .envs.env import RAN_system
-
-REPLAY_MEMORY = 50000
-BATCH_SIZE = 32
-MAX_GROUP = 4   # 1 ~ 4 groups
-MAX_MCS_INDEX = 29 # 0 ~ 28
-MAX_RB = 248
-TAU = 0.005
-STEP = 0.2
-FEATURES = 3 + 2*(1/STEP) # {N_UE, N_data, Capacity, data_dist, delay_dist}
-
-# Training
-BATCH_SIZE = 32
-
-# Replay Memory
-REPLAY_MEMORY = 50000
-
-# Epsilon
-EPSILON_START = 1.0
-EPSILON_END = 0.01
-EPSILON_DECAY = 100000
-
-# LSTM Memory
-LSTM_MEMORY = 128
-
-# ETC Options
-TARGET_UPDATE_INTERVAL = 1000
-CHECKPOINT_INTERVAL = 5000
-PLAY_INTERVAL = 900
-PLAY_REPEAT = 1
-LEARNING_RATE = 0.0001
-
-MODE_R = "Regression"
-MODE_C = "Classification"
+from .utils.constants import *
 
 # Logging
 logger = logging.getLogger('DQN')
