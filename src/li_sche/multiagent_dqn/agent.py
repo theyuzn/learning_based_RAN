@@ -341,7 +341,7 @@ class Agent():
         expected_state_action_values = (next_state_values * gamma) + reward_batch
 
         # Compute Huber loss
-        criterion = nn.SmoothL1Loss()
+        criterion = torch.nn.SmoothL1Loss()
         loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
 
         # Optimize the model
