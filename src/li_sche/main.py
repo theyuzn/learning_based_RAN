@@ -37,29 +37,34 @@ parser.set_defaults(test = False, scheduler = "Li")
 parser: argparse.Namespace = parser.parse_args()
 
 
-def main(parser: argparse.Namespace):   
-    repeat_action = parser.repeat
-    test = parser.test
-    scheduler = parser.scheduler
+class TT():
+    def __init__(self):
+        self.test = 0
+
+def main(parser: argparse.Namespace):     
     
-    system = System(args = parser, cuda = True, action_repeat = repeat_action)
-    if test:
-        system.test_system()
-        return
+    # repeat_action = parser.repeat
+    # test = parser.test
+    # scheduler = parser.scheduler
+    
+    # system = System(args = parser, cuda = True, action_repeat = repeat_action)
+    # if test:
+    #     system.test_system()
+    #     return
 
-    match scheduler:
+    # match scheduler:
 
-        ## Perform lightweight scheduler using DQN
-        case "Li":
-            system.train()
+    #     ## Perform lightweight scheduler using DQN
+    #     case "Li":
+    #         system.train()
 
-        ## Perform Proportional Fairness algorithm
-        case "PF":
-            return
+    #     ## Perform Proportional Fairness algorithm
+    #     case "PF":
+    #         return
         
-        ## Perform Round Robin algorithm
-        case "RR":
-            return
+    #     ## Perform Round Robin algorithm
+    #     case "RR":
+    #         return
 
 if __name__ == '__main__':
     main(parser)
