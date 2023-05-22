@@ -11,6 +11,8 @@ def DCI():
         self.harq_proc = 0
         self.TCP = 0
         self.SUL_ind = 0
+        # Add scheme
+        # To indicate the contention flag
         self.contention = 0
         self.contention_size = 0
 

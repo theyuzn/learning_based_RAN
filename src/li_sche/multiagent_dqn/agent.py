@@ -3,7 +3,6 @@ import math
 import torch
 import logging
 import copy
-from collections import namedtuple
 from random import random, sample
 from collections import namedtuple, deque
 import numpy as np

@@ -42,10 +42,6 @@ SERVER_PORT=3333
 SERVER_HOST="172.17.0.2"
 
 def main(parser: argparse.Namespace):  
-
-    # Initial the system
-    system = System(args = parser)
-
     # Create the sctp socket
     addr = (SERVER_HOST, SERVER_PORT)
     gNB_sock = sctp.sctpsocket(socket.AF_INET, socket.SOCK_STREAM, None)
@@ -62,6 +58,10 @@ def main(parser: argparse.Namespace):
         conn_sock, addr = gNB_sock.accept()
         print(f"connecting: {addr}")
         break
+
+
+     # Initial the system
+    system = System(args = parser,gNB_sock = gNB_sock, conn_sock = conn_sock)
 
     # Running the system
     scheduler = parser.scheduler

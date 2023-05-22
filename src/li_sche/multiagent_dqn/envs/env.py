@@ -1,18 +1,23 @@
-import json
-import os
+'''
+Creater Chuang, Yu-Hsin
+Lab : MWNL -- Mobile & Wireless Networking Labtory
+Advisor : S.T. Sheu
+Copyright @Brandon, @Yu-Hsin Chuang, @Chuang, Yu-Hsin.
+All rights reserved.
+
+Created in 2023/03
+'''
+
 import argparse
 import math
-
 from .ue import UE
 import random
 
 ## Constant
 SLOT_PATTERN1       = ['D','D','S','U','U']
 PATTERN_P1          = 5
-SLOT_PATTERN2       = ['D','D','D','S','U']
-PATTERN_P2          = 5
-SLOT_PATTERN3       = ['D','D','D','D','D','D','D', 'S','U','U']
-PATTERN_P3          = 10
+SLOT_PATTERN2       = ['D','D','D','D','D','S','U', 'U','U','U']
+PATTERN_P2          = 10
 
 SIMULATION_FRAME    = 200
 NUMBER_OF_SUBFRAME  = 10
@@ -43,28 +48,47 @@ class RAN:
 
 class State :
     def __init__(self, 
+                 current_slot_info = 'D',
                  schedule_slot_info = 'D',
-                 ul_uelist = []):
-        
+                 ul_req = list()):
+        self.current_slot_info = current_slot_info
         self.schedule_slot_info = schedule_slot_info
-        self.ul_uelist = ul_uelist
-
-    def rm_ue(self, ue : UE):
-        self.ul_uelist.remove(ue)
-
-    def set_schedule_slot_info(self, schedule_slot_info):
-        self.schedule_slot_info = schedule_slot_info
-
-    def get_schedule_slot_info(self):
-        return self.schedule_slot_info
+        self.ul_req = ul_req
 
     def reset(self):
-        global Global_UE_list
-        self.ul_uelist = Global_UE_list
+        self.current_slot_info = 'D'
         self.schedule_slot_info = 'D'
+        self.ul_req = list()
+
+    def rm_ue(self, ue : UE):
+        self.ul_req.remove(ue)
  
 
 class RAN_system(RAN):
+    '''
+    For this RAN system
+    Input is alway the UE's request (i.e., Uplink msg)
+    Ex. : UCI (i.e., scheduling request / Special slot) and Data (i.e., UL data + BSR / UL slot)
+
+    Output is the State@class which contains the system information
+    The State is consist of Current slot + Sche slot + UL_req
+    For agent to train or inference the scheduler algorithm
+    
+    The scheduling result is sent to UE through DCI msg in DL Slot.
+
+    * How to implement the msg transmission between UE entity and gNB entity ?
+    Use SCTP socket to send the msg.
+
+    * The DCI is sent from gNB to UE over PDCCU in DL slot
+    * The UCL is sent from UE to gNB over PUCCH in Special slot
+    * The msg is sent from UE to gNB over PUSCH in UL slot
+    * The bsr is send from UE to gNB over PUSCH in UL slot
+
+    ### TODO ...
+    1. Consider other types of services in 5G and beyond (only eMBB for now)
+        Ex. URLLC (without configured grant), mMTC, ...
+    2. The DL schedule algorithm
+    '''
     def __init__(self, args : argparse.Namespace):
         super(RAN_system, self).__init__(BW = args.bw,
                                         numerology = args.mu,
@@ -75,26 +99,23 @@ class RAN_system(RAN):
         self.slot = 0
         self.args = args
         self.done = False
+        self.ul_req = list()
 
 
     ### Return 'D'; 'S'; 'U'
     def _get_slot_info(self, slot):
         return self.slot_pattern[slot % self.pattern_p]
 
-
     def init(self):
         self.slot = 0
         schedule_slot_info = self._get_slot_info(self.slot + PRE_SCHE_SLOT)
         current_slot_info = self._get_slot_info(self.slot)
-        self.temp_UE_list = Global_UE_list.copy()
-        self.ul_uelist = list()
+        self.ul_req = list()
         self.done = False
 
-        if current_slot_info == 'U':
-            for _ in range(MAX_UPLINK_GRANT):
-                self.ul_uelist = self.temp_UE_list.pop(0)
-
-        return State(schedule_slot_info= schedule_slot_info, ul_uelist = self.ul_uelist)
+        return State(current_slot_info = current_slot_info,  
+                     schedule_slot_info= schedule_slot_info, 
+                     ul_req = self.ul_req)
     
     def reset(self):
         return self.init()

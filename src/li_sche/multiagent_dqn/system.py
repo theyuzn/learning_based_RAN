@@ -2,13 +2,16 @@ import argparse
 from random import randrange
 from .envs.env import RAN_system
 from .agent import Agent
+import li_sche.utils.pysctp.sctp as sctp
 
 class System():
     ### Init
-    def __init__(self, args: argparse.Namespace):
+    def __init__(self, args: argparse.Namespace, gNB_sock : sctp.sctpsocket_tcp, conn_sock : sctp.sctpsocket_tcp):
         # Agent
         self.agent = Agent(args = args)
         self.env = RAN_system(args = args)
+        self.gNB_sock = gNB_sock
+        self.ue_sock = conn_sock
 
     ### Get initial states
     def get_initial_states(self):
