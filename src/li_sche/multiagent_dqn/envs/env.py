@@ -14,8 +14,11 @@ from .ue import UE
 import random
 
 ## Constant
+# k0 = 0, k1 = 0 ~ 2, k2 = 2 ~ 3
 SLOT_PATTERN1       = ['D','D','S','U','U']
 PATTERN_P1          = 5
+
+# k0 = 0, k1 = 0 ~ 5, k2 = 4 ~ 6
 SLOT_PATTERN2       = ['D','D','D','D','D','S','U', 'U','U','U']
 PATTERN_P2          = 10
 
@@ -32,8 +35,8 @@ class RAN:
                  numerology = 1, 
                  nrofRB     = 248, 
                  k0         = 0,
-                 k1         = 2,
-                 k2         = 4,
+                 k1         = 1,
+                 k2         = 3,
                  slot_pattern = SLOT_PATTERN1,
                  pattern_p = PATTERN_P1):
         self.BW             = BW
@@ -66,7 +69,11 @@ class State :
 
 class RAN_system(RAN):
     '''
-    For this RAN system
+    ### Purpose
+    This work is providing the high throughput 5G scheduler in eMBB system within low delay.
+    Without considering the 1.Fairness, 2.Channel Condition.
+
+    ### RAN system
     Input is alway the UE's request (i.e., Uplink msg)
     Ex. : UCI (i.e., scheduling request / Special slot) and Data (i.e., UL data + BSR / UL slot)
 
@@ -77,17 +84,24 @@ class RAN_system(RAN):
     The scheduling result is sent to UE through DCI msg in DL Slot.
 
     * How to implement the msg transmission between UE entity and gNB entity ?
-    Use SCTP socket to send the msg.
+        Use SCTP socket to send the msg.
+    * The DCI is sent from gNB to UE (over PDCCU) in DL slot or Special slot
+    * The UCL is sent from UE to gNB (over PUCCH) in Special slot
+    * The msg is sent from UE to gNB (over PUSCH) in UL slot
+    * The bsr is send from UE to gNB (over PUSCH) in UL slot
+    The (physical channel) is not implemented yet. maybe no need to implement.
 
-    * The DCI is sent from gNB to UE over PDCCU in DL slot
-    * The UCL is sent from UE to gNB over PUCCH in Special slot
-    * The msg is sent from UE to gNB over PUSCH in UL slot
-    * The bsr is send from UE to gNB over PUSCH in UL slot
+    ### TODO ... 
+    --> In each phase, the reward need to be re-designed.
+    --> In Reforcement learning, you need to design the reward function to achieve the goal you want.
 
-    ### TODO ...
-    1. Consider other types of services in 5G and beyond (only eMBB for now)
+    1. Take Fairness, Channel Condition into account.
+    2. Consider other types of services in 5G and beyond
         Ex. URLLC (without configured grant), mMTC, ...
-    2. The DL schedule algorithm
+    3. The DL schedule algorithm
+    4. The DRL in the UE side (The UE need to learn in the MAC layer)
+    5. The Federated Learning in UE side.
+    6. Cooperative multi-agent in the both side (UE and gNB)
     '''
     def __init__(self, args : argparse.Namespace):
         super(RAN_system, self).__init__(BW = args.bw,

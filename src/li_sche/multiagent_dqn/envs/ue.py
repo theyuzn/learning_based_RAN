@@ -1,20 +1,19 @@
 class UE:
     def __init__(self, 
                  id,            
-                 bsr,    
+                 total_data,    
                  rdb,   
                  service,       
                  nr5QI,        
                  errorrate,     
-                 type,         
-                 mcs = 0, 
-                 rb_id = -1):
+                 type):
         # ----[==================================]---- #
         # ----[         Common UE Config         ]---- #
         # ----[   Including the statistic data   ]---- #
         # ----[==================================]---- #
         self.id = id                    # UE ID (can be seemed as RNTI)
-        self.bsr = bsr                  # Buffer Status Report
+        self.total_data = total_data    # The total size of data
+        self.bsr = 0                    # Buffer Status Report
         self.rdb = rdb                  # Remaining delay budget
         self.service = service          # String [VoNR, Video, Live Stream]
         self.nr5QI = nr5QI              # 5QI
@@ -42,3 +41,5 @@ class UE:
         # ----[   Perform Contention Parameter   ]---- #
         # ----[==================================]---- #
         self.rb_id = rb_id              # In order to perform contention
+
+
