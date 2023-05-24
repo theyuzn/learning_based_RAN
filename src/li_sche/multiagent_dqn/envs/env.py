@@ -12,6 +12,8 @@ import argparse
 import math
 from .ue import UE
 import random
+import li_sche.utils.pysctp.sctp as sctp
+from .msg import MSG, DCI, UCI
 
 ## Constant
 # k0 = 0, k1 = 0 ~ 2, k2 = 2 ~ 3
@@ -28,6 +30,10 @@ MAX_UPLINK_GRANT    = 16
 MAX_GROUP           = 4
 PRE_SCHE_SLOT       = 6
 SIZE_PER_RB         = 400
+
+
+INITIAL = 0x00
+END = 0xff
 
 class RAN:
     def __init__(self, 
@@ -103,7 +109,7 @@ class RAN_system(RAN):
     5. The Federated Learning in UE side.
     6. Cooperative multi-agent in the both side (UE and gNB)
     '''
-    def __init__(self, args : argparse.Namespace):
+    def __init__(self, args : argparse.Namespace, conn_sock : sctp.sctpsocket_tcp):
         super(RAN_system, self).__init__(BW = args.bw,
                                         numerology = args.mu,
                                         nrofRB = args.rb,
@@ -114,11 +120,17 @@ class RAN_system(RAN):
         self.args = args
         self.done = False
         self.ul_req = list()
+        self.conn_sock = conn_sock
 
 
     ### Return 'D'; 'S'; 'U'
     def _get_slot_info(self, slot):
         return self.slot_pattern[slot % self.pattern_p]
+    
+    def gNB_send(self, msg : MSG):
+        print(msg)
+        print(type(msg))
+        self.conn_sock.sctp_send(msg)
 
     def init(self):
         self.slot = 0
@@ -126,6 +138,7 @@ class RAN_system(RAN):
         current_slot_info = self._get_slot_info(self.slot)
         self.ul_req = list()
         self.done = False
+        self.gNB_send(INITIAL.to_bytes(2,'big'))
 
         return State(current_slot_info = current_slot_info,  
                      schedule_slot_info= schedule_slot_info, 

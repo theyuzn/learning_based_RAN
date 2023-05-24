@@ -61,7 +61,7 @@ def main(parser: argparse.Namespace):
 
 
      # Initial the system
-    system = System(args = parser,gNB_sock = gNB_sock, conn_sock = conn_sock)
+    system = System(args = parser, conn_sock = conn_sock)
 
     # Running the system
     scheduler = parser.scheduler

@@ -27,7 +27,7 @@ class UE:
         # ----[          Carried in DCI          ]---- #
         # ----[==================================]---- #
         #             [ Original DCI msg ]             #
-        self.mcs = mcs                  # MCS
+        self.mcs = 0                    # MCS
         self.start_symbol = 0           # Start symbol
         self.time_length = 0            # Time duration
         self.start_rb = 0               # Start RB [RB index]
@@ -40,6 +40,6 @@ class UE:
         # ----[==================================]---- #
         # ----[   Perform Contention Parameter   ]---- #
         # ----[==================================]---- #
-        self.rb_id = rb_id              # In order to perform contention
+        self.rb_id = 0                  # In order to perform contention
 
 

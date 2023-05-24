@@ -14,6 +14,8 @@ from .net.brain import Regression_DQN
 from random import randrange
 from .envs.env import RAN_system
 from .utils.constants import *
+import li_sche.utils.pysctp.sctp as sctp
+
 
 # Logging
 logger = logging.getLogger('DQN')
@@ -59,7 +61,7 @@ This agent is to decide the number of shared RB
     otherwise, the UE will be arranged to perform contention in shared resources.
 '''
 class Agent():
-    def __init__(self, args: argparse.Namespace):
+    def __init__(self, args: argparse.Namespace, conn_sock : sctp.sctpsocket_tcp):
         self.args = args
         self.seed: int = args.seed
         self.action_repeat: int = args.repeat
@@ -76,7 +78,7 @@ class Agent():
         self.epsilon = EPSILON_START
 
         # Environment
-        self.env = RAN_system(args=args)
+        self.env = RAN_system(args=args, conn_sock = conn_sock)
         self.step = 0
 
         # DQN Model
@@ -185,8 +187,6 @@ class Agent():
             while True:   
                 ## state is used to check which the schedule slot is. Ex: 'D', 'U', 'S'
                 ## preprocessed_state is processed state, type : np.ndarray
-                schudule_slot_info = state.get_schedule_slot_info()
-                ul_uelist = state.ul_uelist
                 state = self.preprocessing(state)
                 action = torch.tensor([[0]]).to(self.device)
 
