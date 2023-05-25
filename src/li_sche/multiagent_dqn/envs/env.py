@@ -13,7 +13,7 @@ import math
 from .ue import UE
 import random
 import li_sche.utils.pysctp.sctp as sctp
-from .msg import MSG, DCI, UCI
+from .msg import MSG
 
 ## Constant
 # k0 = 0, k1 = 0 ~ 2, k2 = 2 ~ 3
