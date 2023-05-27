@@ -47,7 +47,7 @@ def main():
     print((test>>24) == tt)
     t = test & tt
     print("0x%x  %x" %(t,tt))
-    return
+    
 
     sk = sctp.sctpsocket_tcp(socket.AF_INET)
     sk.connect(("172.17.0.2", 3333))
@@ -67,10 +67,8 @@ def main():
 
         print(type(msg))
 
-        match(msg):
-            case "Initial":
-                print(msg)
-                break
+        if msg == "Initial":
+            break
             
 
 

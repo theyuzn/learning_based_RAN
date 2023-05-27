@@ -9,4 +9,5 @@ RUN apt install python3-pip -y
 RUN apt libsctp-dev -y
 RUN pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 RUN pip3 install scipy numpy gym matplotlib
+RUN apt install net-tools
 

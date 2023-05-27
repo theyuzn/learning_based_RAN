@@ -31,7 +31,7 @@ class MSG:
     def decode_header(self, msg : np.int64 = 0x00000000):
         id_mask = 0b11111111
         id = id_mask & msg
-        id = id >>24
+        id = id >> 24
 
         if id == 0x00:
             return "Initial"
