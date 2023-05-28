@@ -40,6 +40,7 @@ parser: argparse.Namespace = parser.parse_args()
 
 SERVER_PORT=3333
 SERVER_HOST="172.17.0.2"
+MAX_BUFFER_SIZE = 65535
 
 def main(parser: argparse.Namespace):  
     # Create the sctp socket
@@ -52,17 +53,27 @@ def main(parser: argparse.Namespace):
     gNB_sock.events.data_io = 1
     gNB_sock.events.clear()
 
-    conn_sock : sctp.sctpsocket_tcp
-    while True:
+    conn_sock : sctp.sctpsocket_tcp = 0
+    while conn_sock == 0:
         print("Waiting for user connecting")
         conn_sock, addr = gNB_sock.accept()
         print(f"connecting: {addr}")
         break
+    
+    print("kajsndkjasndkjas")
+    c = 0
+    while True:
+        c +=1
+        msg = "test"
+        print(msg)
+        conn_sock.sctp_send(msg)
 
-
+        if c >= 20:
+            break
+    
      # Initial the system
     system = System(args = parser, conn_sock = conn_sock)
-
+ 
     # Running the system
     scheduler = parser.scheduler
     match scheduler:
@@ -87,6 +98,7 @@ def main(parser: argparse.Namespace):
 
     conn_sock.close()
     gNB_sock.close()
-
+    print("Process is done, BYE!!!")
+       
 if __name__ == '__main__':
     main(parser)

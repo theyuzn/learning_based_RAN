@@ -6,6 +6,7 @@ import socket
 import sctp
 import math
 import numpy as np
+from li_sche.multiagent_dqn.envs.thread import Socket_Thread
 
 from li_sche.multiagent_dqn.envs.ue import UE
 from li_sche.multiagent_dqn.envs.msg import MSG
@@ -34,46 +35,41 @@ def decode_json(dct):
 # class UE_entity(UE):
 BUFFERSIZE = 65535
 
+def callback(msg : bytes = bytes(1)):
+    print(msg)
+
 def main():
-    
-    tt : np.uint64 = 0x15600000
-    print("0x%x" %tt)
+    recv_sock = sctp.sctpsocket_tcp(socket.AF_INET)
+    recv_sock.connect(("172.17.0.2", 3333))
 
-    tt |= 1<<3
-    tt = 0b11111111
-    test = 0xff000000
-    print(tt)
-    print(test >> 28)
-    print((test>>24) == tt)
-    t = test & tt
-    print("0x%x  %x" %(t,tt))
+    receive_thread = Socket_Thread(name = "UE_thread", socket = recv_sock, callback = callback)
+    receive_thread.run()
     
 
-    sk = sctp.sctpsocket_tcp(socket.AF_INET)
-    sk.connect(("172.17.0.2", 3333))
-    sk.sctp_send("test123")
+    ## Initial ##
+    '''
+    The Global_UE_List is to store the UE data.
+    The UE_List is the actual list to perform the system running.
+    '''
 
     UE_List = list()
+    Global_UE_List = list()
     cur_path = os.path.dirname(__file__)
     new_path = os.path.join(cur_path, 'data/uedata.json')
     with open(new_path, 'r') as ue_file:
-        Global_UE_list = json.load(ue_file,object_hook=decode_json) 
-    for i in range(len(Global_UE_list)):
-        Global_UE_list[i].id = i + 1
+        Global_UE_List = json.load(ue_file,object_hook=decode_json) 
+    for i in range(len(Global_UE_List)):
+        Global_UE_List[i].id = i + 1
+     
+    UE_List = Global_UE_List.copy()
 
+   
 
-    while True:
-        fromaddr, flags, msg, notif = sk.sctp_recv(BUFFERSIZE)
-
-        print(type(msg))
-
-        if msg == "Initial":
-            break
             
 
 
 
-    sk.close()
+    recv_sock.close()
 
 if __name__ == '__main__':
     main()

@@ -15,6 +15,8 @@ import random
 import li_sche.utils.pysctp.sctp as sctp
 from .msg import MSG
 
+from .thread import Socket_Thread
+
 ## Constant
 # k0 = 0, k1 = 0 ~ 2, k2 = 2 ~ 3
 SLOT_PATTERN1       = ['D','D','S','U','U']
@@ -121,6 +123,11 @@ class RAN_system(RAN):
         self.done = False
         self.ul_req = list()
         self.conn_sock = conn_sock
+        while True:
+            self.conn_sock.sctp_send("tset")
+
+    def callback(self, msg : bytes):
+        print(msg)
 
 
     ### Return 'D'; 'S'; 'U'
