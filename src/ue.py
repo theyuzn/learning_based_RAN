@@ -10,7 +10,7 @@ import time
 from li_sche.multiagent_dqn.envs.thread import Socket_Thread
 
 from li_sche.multiagent_dqn.envs.ue import UE
-from li_sche.multiagent_dqn.envs.msg import MSG
+from li_sche.multiagent_dqn.envs.msg import *
 
 # UE data constant
 ID          = 'id'
@@ -22,10 +22,12 @@ NR5QI       = '5QI'
 ER          = 'errorrate'
 TYPE        = 'type'
 
-
+i = 0
 def decode_json(dct):
+    global i
+    i += 1
     return  UE(
-                id              = 0, 
+                id              = i, 
                 total_data      = dct[SIZE],
                 rdb             = dct[DELAY]*math.pow(2, 1),
                 service         = dct[WINDOW],
@@ -33,11 +35,51 @@ def decode_json(dct):
                 errorrate       = dct[ER],
                 type            = dct[TYPE])
 
-# class UE_entity(UE):
+
+## Constant        
 BUFFERSIZE = 65535
 
-def callback(msg : bytes = bytes(1)):
-    print(msg)
+## Global variables ##
+system_frame = 0
+system_slot = 0
+done = False
+UE_List = list()
+######################
+
+def decode_msg(self, msg : np.uint64):
+    pass
+
+def callback(msg : bytes):
+    msg = np.uint64(int.from_bytes(msg, "big"))
+    recv_msg = MSG()
+    recv_msg.payload = msg
+    header = recv_msg.decode_header()
+
+    match header:
+        case "Init":
+            global system_frame, system_slot, UE_List
+            system_frame = 0
+            system_slot = 0
+            UE_List = list()
+            path = f"{os.path.dirname(__file__)}/data/uedata.json"
+            with open(path, 'r') as ue_file:
+                UE_List = json.load(ue_file,object_hook=decode_json) 
+
+        case "End":
+            global done
+            done = True
+
+        case "Sync":
+            sync_msg = SYNC()
+            sync_msg.payload = msg
+            sync_msg.decode_msg()
+            global system_frame, system_slot
+            system_frame = sync_msg.frame
+            system_slot = sync_msg.slot
+
+        case "Msg":
+            
+            pass
 
 def main():
     '''
@@ -64,21 +106,14 @@ def main():
     
 
     ## Initial ##
-    '''
-    The Global_UE_List is to store the UE data.
-    The UE_List is the actual list to perform the system running.
-    '''
+   
+    global system_frame, system_slot, UE_List, done
+   
 
-    UE_List = list()
-    Global_UE_List = list()
-    cur_path = os.path.dirname(__file__)
-    new_path = os.path.join(cur_path, 'data/uedata.json')
-    with open(new_path, 'r') as ue_file:
-        Global_UE_List = json.load(ue_file,object_hook=decode_json) 
-    for i in range(len(Global_UE_List)):
-        Global_UE_List[i].id = i + 1
-     
-    UE_List = Global_UE_List.copy()
+    
+
+    while len(UE_List) > 0 or not done:
+        pass
 
    
 

@@ -17,12 +17,11 @@ class MSG:
         self.type = ''  # {'Init', 'End', 'Sync', 'Msg'}
         self.payload : np.uint64 = 0
 
-    def decode_header(self, msg : np.uint64):
+    def decode_header(self):
         size = 64
         pos = 0
-        self.payload = msg
 
-         # unpack the header          // 16 bits
+        # unpack the header          // 16 bits
         pos += 16
         header = (self.payload >> (size - pos)) & ((1 << 16) - 1)
 
@@ -66,10 +65,9 @@ class SYNC(MSG):
         pos += 4
         self.payload |= (np.uint32(self.slot) & 0xf) << (size - pos)
 
-    def decode_msg(self, msg : np.uint64):
+    def decode_msg(self):
         size = 64
         pos = 16                # skip the header // 16 bits
-        self.payload = msg
 
         # unpack frame          // 10 bits
         pos += 10
