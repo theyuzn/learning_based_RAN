@@ -3,14 +3,18 @@ import numpy as np
 class MSG:
     def __init__(self):
         '''
-        The payload begins with the UE_ID, the msg is identified with this.
-        If the UE_ID = 0b0000000000000000 (0), it is the initial message.
-        If the UE_ID = 0b1111111111111111 (65535), it is the ending message.
-        If the UE_ID = 0b1111111111111110 (65534), it is the sync message.
-        Otherwise, represent the UE_ID (i.e., C_RNTI for UE)
+        1.) DownLink Message
+        The payload begins with the header, the msg is identified with this.
+        If the header = 0b0000000000000000 (0), it is the initial message.
+        If the header = 0b1111111111111111 (65535), it is the ending message.
+        If the header = 0b1111111111111110 (65534), it is the sync message.
+        Otherwise, represent the UE_id (i.e., C_RNTI for UE)
+
+        2.) Uplink Message
+        The UCI is focusing on the Scheduling Request (SR) after the header
         '''        
-        self.UE_id : np.uint16 = 0b0000000000000000 
-        self.type = ''
+        self.header : np.uint16 = 0b0000000000000000 
+        self.type = ''  # {'Init', 'End', 'Sync', 'Msg'}
         self.payload : np.uint64 = 0
 
     def decode_header(self, msg : np.uint64):
@@ -18,7 +22,7 @@ class MSG:
         pos = 0
         self.payload = msg
 
-         # unpack the UE_ID          // 16 bits
+         # unpack the header          // 16 bits
         pos += 16
         header = (self.payload >> (size - pos)) & ((1 << 16) - 1)
 
@@ -42,17 +46,17 @@ class SYNC(MSG):
 
     def fill_payload(self):
         '''
-        UE_id   : 16 bits
+        header  : 16 bits
         Frame   : 10 bits
         Slot    : 4 bits
         '''
-        self.UE_id = 0b1111111111111110
+        self.header = 0b1111111111111110
         size = 64
         pos = 0
         
         # fill UE ID                    // 16 bits
         pos += 16
-        self.payload |= (np.uint64(self.UE_id) & ((1 << 16) - 1)) << (size - pos)
+        self.payload |= (np.uint64(self.header) & ((1 << 16) - 1)) << (size - pos)
 
         # Frame
         pos += 10
@@ -78,12 +82,11 @@ class SYNC(MSG):
 class DCI(MSG):
     def __init__(self):
         super(DCI, self).__init__()
-        self.UE_id : np.uint16 = 0b0000000000000000
         self.DCI_format = 0 # 0 : UL DCI, 1 : DL DCI
 
     def decode_DCI_foramt(self, msg : np.uint64):
         dci_size = 64
-        pos = 16 # skip the UE_id
+        pos = 16 # skip the header
         
         # unpack the DCI foramt
         pos += 1
@@ -96,6 +99,7 @@ class DCI(MSG):
 class DCI_1_0(DCI):
     def __init__(self):
         super(DCI_1_0,self).__init__()
+        self.UE_id = 0                                      # The UE ID for 16 bits
         self.format_indicator = 0                           # always 1 for DL
         self.frequency_domain_assignment = 0                # 
         self.time_domain_assignment = 0                     # 
@@ -115,7 +119,7 @@ class DCI_1_0(DCI):
 
         # fill UE ID                    // 16 bits
         pos += 16
-        self.payload |= (np.uint64(self.UE_id) & ((1 << 16) - 1)) << (dci_size - pos)
+        self.payload |= (np.uint64(self.header) & ((1 << 16) - 1)) << (dci_size - pos)
 
         # fill DCI format               // 1 bit
         pos += 1
@@ -170,9 +174,10 @@ class DCI_1_0(DCI):
         dci_size = 64
         self.payload = msg
 
-        # unpack the UE_ID          // 16 bits
+        # unpack the header          // 16 bits
         pos += 16
-        self.UE_id = (self.payload >> (dci_size - pos)) & ((1 << 16) - 1)
+        self.header = (self.payload >> (dci_size - pos)) & ((1 << 16) - 1)
+        self.UE_id = self.header
 
         # unpack DCI format               // 1 bit
         pos += 1
@@ -226,6 +231,7 @@ class DCI_1_0(DCI):
 class DCI_0_0(DCI):
     def __init__(self):
         super(DCI_1_0,self).__init__()
+        self.UE_id = 0                                  # The 16 bits UE id
         self.format_indicator = 0                       # always 0 for UL
         self.frequency_domain_resource_assignment = 0   # number of RB
         self.time_domain_resource_assignment = 0        # 
@@ -245,9 +251,9 @@ class DCI_0_0(DCI):
         dci_size = 64
         pos = 0
 
-        # fill UE ID                    // 16 bits
+        # fill header                    // 16 bits
         pos += 16
-        self.payload |= (np.uint64(self.UE_id) & ((1 << 16) - 1)) << (dci_size - pos)
+        self.payload |= (np.uint64(self.header) & ((1 << 16) - 1)) << (dci_size - pos)
         
         # fill DCI format               // 1 bit
         pos += 1
@@ -305,9 +311,10 @@ class DCI_0_0(DCI):
         dci_size = 64
         self.payload = msg
 
-        # unpack the UE_ID          // 16 bits
+        # unpack the header          // 16 bits
         pos += 16
-        self.UE_id = (self.payload >> (dci_size - pos)) & ((1 << 16) - 1)
+        self.header = (self.payload >> (dci_size - pos)) & ((1 << 16) - 1)
+        self.UE_id = self.header
 
         # unpack DCI format               // 1 bit
         pos += 1
@@ -368,6 +375,31 @@ class DCI_0_0(DCI):
 class UCI(MSG):
     def __init__(self):
         super(UCI,self).__init__()
-        self.ANK_NACK = 0
+        self.ACK_NACK = 0
+        self.proc_id = 0
         self.SR = 0
         self.CSI = 0
+
+    def fill_payload(self):
+        uci_size = 64
+        pos = 0
+
+        # fill the header           // 16 bits
+        pos += 16
+        self.payload |= (np.uint64(self.header) & ((1 << 16) - 1)) << (uci_size - pos)
+
+        # fill the porc_id          // 4 bits
+        pos += 4
+        self.payload |= (np.uint64(self.proc_id) & 0xf) << (uci_size - pos)
+
+        # fill the nack             // 1 bit
+        pos += 1
+        self.payload |= (np.uint64(self.ACK_NACK) & 1) << (uci_size - pos)
+
+        # fill the SR               // 1 bit
+        pos += 1
+        self.payload |= (np.uint64(self.SR) & 1) << (uci_size - pos)
+
+        # fill the CSI              // 4 bits
+        pos += 4
+        self.payload |= (np.uint64(self.CSI) & 0xf) << (uci_size - pos)

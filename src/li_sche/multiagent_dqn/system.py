@@ -3,13 +3,17 @@ from random import randrange
 from .envs.env import RAN_system
 from .agent import Agent
 import li_sche.utils.pysctp.sctp as sctp
+from .envs.msg import *
+from .envs.thread import Socket_Thread
 
 class System():
     ### Init
-    def __init__(self, args: argparse.Namespace, conn_sock : sctp.sctpsocket_tcp):
+    def __init__(self, args: argparse.Namespace, send_sock : sctp.sctpsocket_tcp, recv_sock : sctp.sctpsocket_tcp):
         # Agent
-        self.agent = Agent(args = args, conn_sock = conn_sock)
-        self.env = RAN_system(args = args, conn_sock = conn_sock)
+        self.agent = Agent(args = args, send_sock = send_sock, recv_sock = recv_sock)
+        self.env = RAN_system(args = args, send_sock = send_sock, recv_sock = recv_sock)
+        self.recv_sock = recv_sock
+        self.send_sock = send_sock
  
     ### Get initial states
     def get_initial_states(self):
@@ -17,12 +21,18 @@ class System():
         return state
 
     ############################### Test ############################## 
+    def callback(self, msg):
+        print(msg)
+        pass
+
     def test_system(self):
         state = self.env.reset()
-        slot = 0
         done = False
+        
+        receive_thread = Socket_Thread(name = "Rx_thread", socket = self.recv_sock, callback = self.callback)
+        receive_thread.run()
+
         while not done:
-            ul_uelist = state.ul_uelist
 
             used_rb = 0
             if state.schedule_slot_info == 'U':

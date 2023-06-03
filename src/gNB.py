@@ -30,7 +30,6 @@ parser.add_argument('--seed', default=111, type=int, help='random seed')
 parser.add_argument('--repeat', default = 4, type = int, help = 'The LSTM model')
 
 ########################################## Exp parameter ##########################################
-parser.add_argument('--test', default=False, type = bool, help='To test the RAN system')
 parser.add_argument('--scheduler', default="Li", help='To indicate the scheduler algorithm')
 
 ##########################################  Set default  ##########################################
@@ -38,41 +37,50 @@ parser.set_defaults(test = False, scheduler = "Li")
 parser: argparse.Namespace = parser.parse_args()
 
 
-SERVER_PORT=3333
+RECV_PORT = 3333
+SEND_PORT = 3334
 SERVER_HOST="172.17.0.2"
 MAX_BUFFER_SIZE = 65535
 
-def main(parser: argparse.Namespace):  
-    # Create the sctp socket
-    addr = (SERVER_HOST, SERVER_PORT)
-    gNB_sock = sctp.sctpsocket(socket.AF_INET, socket.SOCK_STREAM, None)
-    gNB_sock.initparams.max_instreams = 3
-    gNB_sock.initparams.num_ostreams = 3
-    gNB_sock.bindx([addr])
-    gNB_sock.listen(5)
-    gNB_sock.events.data_io = 1
-    gNB_sock.events.clear()
+def main(parser: argparse.Namespace): 
+    '''
+    To emulate the Rx and Tx, I create two socket
+    recv_sock is responsible for the Rx antenna
+    send_sock is responsible for the Tx antenna
+    The recv_sock will ocuupies one thread to receive the msg.
+    '''
+    recv_sock : sctp.sctpsocket_tcp = 0
+    send_sock : sctp.sctpsocket_tcp = 0
 
-    conn_sock : sctp.sctpsocket_tcp = 0
-    while conn_sock == 0:
-        print("Waiting for user connecting")
-        conn_sock, addr = gNB_sock.accept()
-        print(f"connecting: {addr}")
-        break
-    
-    print("kajsndkjasndkjas")
-    c = 0
-    while True:
-        c +=1
-        msg = "test"
-        print(msg)
-        conn_sock.sctp_send(msg)
+    # Create the server socket, to bind and wait for connections
+    # For Rx antenna
+    server_recv_sock = sctp.sctpsocket(socket.AF_INET, socket.SOCK_STREAM, None)
+    server_recv_sock.initparams.max_instreams = 1
+    server_recv_sock.initparams.num_ostreams = 1
+    server_recv_sock.bindx([(SERVER_HOST, RECV_PORT)])
+    server_recv_sock.listen(5)
+    server_recv_sock.events.data_io = 1
+    server_recv_sock.events.clear()
+    print("Waiting for UE's Tx conntenion")
+    recv_sock, _ = server_recv_sock.accept()
+    print(f"recv_sock is connected.")
 
-        if c >= 20:
-            break
+    # For Tx antenna
+    server_send_sock = sctp.sctpsocket(socket.AF_INET, socket.SOCK_STREAM, None)
+    server_send_sock.initparams.max_instreams = 1
+    server_send_sock.initparams.num_ostreams = 1
+    server_send_sock.bindx([(SERVER_HOST, SEND_PORT)])
+    server_send_sock.listen(5)
+    server_send_sock.events.data_io = 1
+    server_send_sock.events.clear()
+
+    print("Waiting for UE's Rx conntenion")
+    send_sock, _ = server_send_sock.accept()
+    print(f"send_sock is connected.")
     
-     # Initial the system
-    system = System(args = parser, conn_sock = conn_sock)
+    
+    # Initial the system
+    system = System(args = parser, send_sock = send_sock, recv_sock = recv_sock)
  
     # Running the system
     scheduler = parser.scheduler
@@ -96,8 +104,10 @@ def main(parser: argparse.Namespace):
             system.RR()
             return
 
-    conn_sock.close()
-    gNB_sock.close()
+    recv_sock.close()
+    send_sock.close()
+    server_recv_sock.close()
+    server_send_sock.close()
     print("Process is done, BYE!!!")
        
 if __name__ == '__main__':

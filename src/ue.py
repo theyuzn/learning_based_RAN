@@ -6,6 +6,7 @@ import socket
 import sctp
 import math
 import numpy as np
+import time
 from li_sche.multiagent_dqn.envs.thread import Socket_Thread
 
 from li_sche.multiagent_dqn.envs.ue import UE
@@ -39,8 +40,24 @@ def callback(msg : bytes = bytes(1)):
     print(msg)
 
 def main():
+    '''
+    To emulate the Rx and Tx, create two socket
+    recv_sock is responsible for the Rx antenna
+    send_sock is responsible for the Tx antenna
+    The recv_sock will ocuupies one thread to receive the msg.
+    '''
+
+    recv_sock : sctp.sctpsocket_tcp = 0
+    send_sock : sctp.sctpsocket_tcp = 0
+
+    # The send_sock needs to connect to the recv_sock in the gNB
+    send_sock = sctp.sctpsocket_tcp(socket.AF_INET)
+    send_sock.connect(("172.17.0.2", 3333))
+    time.sleep(1)
+    # The recv_sock needs to connect to the send_sock in the gNB
     recv_sock = sctp.sctpsocket_tcp(socket.AF_INET)
-    recv_sock.connect(("172.17.0.2", 3333))
+    recv_sock.connect(("172.17.0.2", 3334))
+
 
     receive_thread = Socket_Thread(name = "UE_thread", socket = recv_sock, callback = callback)
     receive_thread.run()
@@ -68,7 +85,7 @@ def main():
             
 
 
-
+    send_sock.close()
     recv_sock.close()
 
 if __name__ == '__main__':

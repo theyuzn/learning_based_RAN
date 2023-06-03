@@ -111,7 +111,7 @@ class RAN_system(RAN):
     5. The Federated Learning in UE side.
     6. Cooperative multi-agent in the both side (UE and gNB)
     '''
-    def __init__(self, args : argparse.Namespace, conn_sock : sctp.sctpsocket_tcp):
+    def __init__(self, args : argparse.Namespace, send_sock : sctp.sctpsocket_tcp, recv_sock : sctp.sctpsocket_tcp):
         super(RAN_system, self).__init__(BW = args.bw,
                                         numerology = args.mu,
                                         nrofRB = args.rb,
@@ -122,12 +122,8 @@ class RAN_system(RAN):
         self.args = args
         self.done = False
         self.ul_req = list()
-        self.conn_sock = conn_sock
-        while True:
-            self.conn_sock.sctp_send("tset")
+        self.send_sock = send_sock
 
-    def callback(self, msg : bytes):
-        print(msg)
 
 
     ### Return 'D'; 'S'; 'U'
@@ -135,9 +131,7 @@ class RAN_system(RAN):
         return self.slot_pattern[slot % self.pattern_p]
     
     def gNB_send(self, msg : MSG):
-        print(msg)
-        print(type(msg))
-        self.conn_sock.sctp_send(msg)
+        self.send_sock.sctp_send(msg)
 
     def init(self):
         self.slot = 0
