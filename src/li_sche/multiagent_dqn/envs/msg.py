@@ -6,11 +6,33 @@ class MSG:
         The payload begins with the UE_ID, the msg is identified with this.
         If the UE_ID = 0b0000000000000000 (0), it is the initial message.
         If the UE_ID = 0b1111111111111111 (65535), it is the ending message.
+        If the UE_ID = 0b1111111111111110 (65534), it is the sync message.
         Otherwise, represent the UE_ID (i.e., C_RNTI for UE)
         '''        
-        self.UE_id : np.uint16 = 0b0000000000000000      
+        self.UE_id : np.uint16 = 0b0000000000000000 
+        self.type = ''
         self.payload : np.uint64 = 0
 
+    def decode_header(self, msg : np.uint64):
+        size = 64
+        pos = 0
+        self.payload = msg
+
+         # unpack the UE_ID          // 16 bits
+        pos += 16
+        header = (self.payload >> (size - pos)) & ((1 << 16) - 1)
+
+        if header == 0b0000000000000000 :
+            self.type = 'Init'
+        elif header == 0b1111111111111111:
+            self.type = 'End'
+        elif header == 0b1111111111111110:
+            self.type = 'Sync'
+        else:
+            self.type = 'Msg'
+        
+        return self.type
+            
 
 class SYNC(MSG):
     def __init__(self):
@@ -20,11 +42,17 @@ class SYNC(MSG):
 
     def fill_payload(self):
         '''
-        Frame : 10 bits
-        Slot : 4 bits
+        UE_id   : 16 bits
+        Frame   : 10 bits
+        Slot    : 4 bits
         '''
+        self.UE_id = 0b1111111111111110
         size = 64
         pos = 0
+        
+        # fill UE ID                    // 16 bits
+        pos += 16
+        self.payload |= (np.uint64(self.UE_id) & ((1 << 16) - 1)) << (size - pos)
 
         # Frame
         pos += 10
@@ -34,10 +62,38 @@ class SYNC(MSG):
         pos += 4
         self.payload |= (np.uint32(self.slot) & 0xf) << (size - pos)
 
+    def decode_msg(self, msg : np.uint64):
+        size = 64
+        pos = 16                # skip the header // 16 bits
+        self.payload = msg
+
+        # unpack frame          // 10 bits
+        pos += 10
+        self.frame = (self.payload >> (size - pos)) & 0x3ff
+
+        # unpack slot           // 4 bits
+        pos += 4
+        self.slot = (self.payload >> (size - pos)) & 0xf
+
+class DCI(MSG):
+    def __init__(self):
+        super(DCI, self).__init__()
+        self.UE_id : np.uint16 = 0b0000000000000000
+        self.DCI_format = 0 # 0 : UL DCI, 1 : DL DCI
+
+    def decode_DCI_foramt(self, msg : np.uint64):
+        dci_size = 64
+        pos = 16 # skip the UE_id
+        
+        # unpack the DCI foramt
+        pos += 1
+        self.DCI_format = (self.payload >> (dci_size - pos)) & 1
+
+        return self.DCI_format
 
 
 # This msg is carried on PDCCH Physical Downlink Control Channel
-class DCI_1_0(MSG):
+class DCI_1_0(DCI):
     def __init__(self):
         super(DCI_1_0,self).__init__()
         self.format_indicator = 0                           # always 1 for DL
@@ -56,7 +112,11 @@ class DCI_1_0(MSG):
     def fill_payload(self):
         dci_size = 64
         pos = 0
-        
+
+        # fill UE ID                    // 16 bits
+        pos += 16
+        self.payload |= (np.uint64(self.UE_id) & ((1 << 16) - 1)) << (dci_size - pos)
+
         # fill DCI format               // 1 bit
         pos += 1
         self.payload |= (np.uint64(1)) << (dci_size - pos)
@@ -95,7 +155,7 @@ class DCI_1_0(MSG):
 
         # TPC for scheduling PUCCH       // 2 bits
         pos += 2
-        self.payload |= (np.uint32(self.tpc) & 0xf) << (dci_size - pos)
+        self.payload |= (np.uint32(self.tpc) & 0x3) << (dci_size - pos)
 
         # PUCCH resource indicator      // 3 bits
         pos += 3
@@ -104,11 +164,66 @@ class DCI_1_0(MSG):
         # PDSCH-to-HARQ_feedback timing indicator // 3 bits
         pos += 3
         self.payload |= (np.uint32(self.pdsch_to_harq_feedback_timing_indicator) & 0x7) << (dci_size - pos)
+
+    def decode_msg(self, msg : np.uint64):
+        pos = 0
+        dci_size = 64
+        self.payload = msg
+
+        # unpack the UE_ID          // 16 bits
+        pos += 16
+        self.UE_id = (self.payload >> (dci_size - pos)) & ((1 << 16) - 1)
+
+        # unpack DCI format               // 1 bit
+        pos += 1
+        self.format_indicator = (self.payload >> (dci_size - pos)) & 1
+
+        # unpack the frequency domain     // 16 bits (N_RB = 275 is the most)
+        pos += 16
+        self.frequency_domain_assignment = (self.payload >> (dci_size - pos)) & ((1 << 16) - 1)
+
+        # unpack the time domain          // 4 bits
+        pos += 4
+        self.time_domain_assignment = (self.payload >> (dci_size - pos)) & 0xf
+
+        # VRB to PRB mapping            // 1 bit
+        pos += 1
+        self.vrb_to_prb_mapping = (self.payload >> (dci_size - pos)) & 1
+
+        # Modulation and Coding Scheme  // 5 bits
+        pos += 5
+        self.mcs = (self.payload >> (dci_size - pos)) & 0x1f
+
+        # New data indicator            // 1 bit
+        pos += 1
+        self.ndi = (self.payload >> (dci_size - pos)) & 1
+
+        # Redundancy version            // 2 bits
+        pos +=2
+        self.rv = (self.payload >> (dci_size - pos)) & 0x3
+
+        # HARQ process number           // 4 bits
+        pos += 4
+        self.harq_process_number = (self.payload >> (dci_size - pos)) & 0xf
+
+        # Downlink assignment index     // 2 bits
+        pos += 2
+        self.downlink_assignment_index = (self.payload >> (dci_size - pos)) & 0x3
+
+        # TPC for scheduling PUCCH       // 2 bits
+        pos += 2
+        self.tpc = (self.payload >> (dci_size - pos)) & 0x3
+
+        # PUCCH resource indicator      // 3 bits
+        pos += 3
+        self.pucch_resource = (self.payload >> (dci_size - pos)) & 0x7
+
+        # PDSCH-to-HARQ_feedback timing indicator // 3 bits
+        pos += 3
+        self.pdsch_to_harq_feedback_timing_indicator = (self.payload >> (dci_size - pos)) & 0x7
         
 
-        
-
-class DCI_0_0(MSG):
+class DCI_0_0(DCI):
     def __init__(self):
         super(DCI_1_0,self).__init__()
         self.format_indicator = 0                       # always 0 for UL
@@ -129,19 +244,18 @@ class DCI_0_0(MSG):
     def fill_payload(self):
         dci_size = 64
         pos = 0
+
+        # fill UE ID                    // 16 bits
+        pos += 16
+        self.payload |= (np.uint64(self.UE_id) & ((1 << 16) - 1)) << (dci_size - pos)
         
         # fill DCI format               // 1 bit
         pos += 1
         self.payload |= (np.uint64(1)) << (dci_size - pos)
 
-        # fill the frequency domain     // 16 bits (N_RB = 275 is the most)
-        '''
-        The original Freq. domain only occupies 4 bits
-        But in this design, we suppose that all the freq. resource can be used as contention-based reosurce.
-        For the scheduled UE (contention-free), the value of freq. value still occupies 4 bits only.
-        '''
-        pos += 16
-        self.payload |= (np.uint64(self.frequency_domain_assignment) & ((1 << 16) - 1)) << (dci_size - pos)
+        # fill the frequency domain     // 4 bits
+        pos += 4
+        self.payload |= (np.uint64(self.frequency_domain_assignment) & 0xf) << (dci_size - pos)
 
         # fill the time domain          // 4 bits
         pos += 4
@@ -179,12 +293,72 @@ class DCI_0_0(MSG):
         pos += 1
         self.payload |= (np.uint32(self.contention) & 1) << (dci_size - pos)
 
-        # contention size (up to 15 RBs) // 4 bits
-        pos += 4
-        self.payload |= (np.uint32(self.contention_size) & 1) << (dci_size - pos)
+        # contention size (up to 275 RBs, all RB are arranged to be contention) // 16 bits
+        '''
+        This field indicates the range of contention-based RB size.
+        '''
+        pos += 16
+        self.payload |= (np.uint32(self.contention_size) & ((1 << 16) - 1)) << (dci_size - pos)
 
-    def config_dci(self, dci : np.uint64):
-        pass
+    def decode_msg(self, msg : np.uint64):
+        pos = 0
+        dci_size = 64
+        self.payload = msg
+
+        # unpack the UE_ID          // 16 bits
+        pos += 16
+        self.UE_id = (self.payload >> (dci_size - pos)) & ((1 << 16) - 1)
+
+        # unpack DCI format               // 1 bit
+        pos += 1
+        self.format_indicator = (self.payload >> (dci_size - pos)) & 1
+
+        # unpack the frequency domain     // 4 bits
+        pos += 4
+        self.frequency_domain_assignment = (self.payload >> (dci_size - pos)) & 0xf
+
+        # unpack the time domain          // 4 bits
+        pos += 4
+        self.time_domain_assignment = (self.payload >> (dci_size - pos)) & 0xf
+
+        # frequency hopping               // 1 bit
+        pos += 1
+        self.frequceny_hopping_flag = (self.payload >> (dci_size - pos)) & 1
+
+        # Modulation and Coding Scheme  // 5 bits
+        pos += 5
+        self.mcs = (self.payload >> (dci_size - pos)) & 0x1f
+
+        # New data indicator            // 1 bit
+        pos += 1
+        self.ndi = (self.payload >> (dci_size - pos)) & 1
+
+        # Redundancy version            // 2 bits
+        pos +=2
+        self.rv = (self.payload >> (dci_size - pos)) & 0x3
+
+        # HARQ process number           // 4 bits
+        pos += 4
+        self.harq_process_number = (self.payload >> (dci_size - pos)) & 0xf
+
+        # TPC for scheduling PUCCH       // 2 bits
+        pos += 2
+        self.TPC_command_for_schedule_pusch = (self.payload >> (dci_size - pos)) & 0x3
+
+        # unpack the SUL indicator      // 1 bit
+        pos += 1
+        self.SUL_indicator = (self.payload >> (dci_size - pos)) & 1
+
+        # unpack contention flag     // 1 bits
+        pos += 1
+        self.contention = (self.payload >> (dci_size - pos)) & 1
+
+        # unpack contention size    // 16 bits
+        pos += 16
+        self.contention_size = (self.payload >> (dci_size - pos)) & ((1 << 16) - 1)
+
+
+        
 
 
 
