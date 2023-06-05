@@ -60,13 +60,8 @@ def decode_msg(self, msg : np.uint64):
     pass
 
 def downlink_channel(msg : bytes):
-    msg = int.from_bytes(msg, "big")
-    msg = np.uint64(msg)
     recv_msg = MSG()
-
-    recv_msg.payload = int(msg)
-    print(recv_msg.payload)
-    # recv_msg.payload = 0
+    recv_msg.payload = int.from_bytes(msg, "big")
     header = recv_msg.decode_header()
 
     global system_frame, system_slot, UE_List, done
