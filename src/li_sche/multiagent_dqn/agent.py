@@ -1,3 +1,13 @@
+'''
+Creater Chuang, Yu-Hsin
+Lab : MWNL -- Mobile & Wireless Networking Labtory
+Advisor : S.T. Sheu
+Copyright @Brandon, @Yu-Hsin Chuang, @Chuang, Yu-Hsin.
+All rights reserved.
+
+Created in 2023/03
+'''
+
 import argparse
 import math
 import torch
@@ -78,7 +88,7 @@ class Agent():
         self.epsilon = EPSILON_START
 
         # Environment
-        self.env = RAN_system(args=args, send_sock = send_sock, recv_sock = recv_sock)
+        self.env = RAN_system(args=args)
         self.step = 0
 
         # DQN Model

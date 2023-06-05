@@ -18,7 +18,7 @@ from .msg import MSG
 from .thread import Socket_Thread
 
 ## Constant
-# k0 = 0, k1 = 0 ~ 2, k2 = 2 ~ 3
+# k0 = 0, k1 = 0 ~ 2, k2 = 3
 SLOT_PATTERN1       = ['D','D','S','U','U']
 PATTERN_P1          = 5
 
@@ -34,8 +34,13 @@ PRE_SCHE_SLOT       = 6
 SIZE_PER_RB         = 400
 
 
-INITIAL = 0x00
-END = 0xff
+# This is the uplink channel for gNB
+def uplink_channel(msg):
+    pass
+
+# This is the downlink channel for gNB
+def downlink_channel(msg):
+    pass
 
 class RAN:
     def __init__(self, 
@@ -102,7 +107,6 @@ class RAN_system(RAN):
     ### TODO ... 
     --> In each phase, the reward need to be re-designed.
     --> In Reforcement learning, you need to design the reward function to achieve the goal you want.
-
     1. Take Fairness, Channel Condition into account.
     2. Consider other types of services in 5G and beyond
         Ex. URLLC (without configured grant), mMTC, ...
@@ -111,27 +115,19 @@ class RAN_system(RAN):
     5. The Federated Learning in UE side.
     6. Cooperative multi-agent in the both side (UE and gNB)
     '''
-    def __init__(self, args : argparse.Namespace, send_sock : sctp.sctpsocket_tcp, recv_sock : sctp.sctpsocket_tcp):
+    def __init__(self, args : argparse.Namespace):
         super(RAN_system, self).__init__(BW = args.bw,
                                         numerology = args.mu,
-                                        nrofRB = args.rb,
-                                        k0 = args.k0,
-                                        k1 = args.k1,
-                                        k2 = args.k2)
+                                        nrofRB = args.rb)
+        self.frame = 0
         self.slot = 0
         self.args = args
         self.done = False
         self.ul_req = list()
-        self.send_sock = send_sock
-
-
 
     ### Return 'D'; 'S'; 'U'
     def _get_slot_info(self, slot):
         return self.slot_pattern[slot % self.pattern_p]
-    
-    def gNB_send(self, msg : MSG):
-        self.send_sock.sctp_send(msg)
 
     def init(self):
         self.slot = 0
@@ -139,7 +135,6 @@ class RAN_system(RAN):
         current_slot_info = self._get_slot_info(self.slot)
         self.ul_req = list()
         self.done = False
-        self.gNB_send(INITIAL.to_bytes(2,'big'))
 
         return State(current_slot_info = current_slot_info,  
                      schedule_slot_info= schedule_slot_info, 
@@ -154,9 +149,7 @@ class RAN_system(RAN):
                collision_number_map : dict = dict(), 
                success_number_map : dict = dict(),
                expect_data_map : dict = dict(),
-               success_data_map : dict = dict()
-    ):
-        
+               success_data_map : dict = dict()):
         reward = 0
         ## These weight size equal to MAX_GROUP 
         weight_recv_data = [1,1,1,1]

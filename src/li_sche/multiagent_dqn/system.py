@@ -1,3 +1,14 @@
+'''
+Creater Chuang, Yu-Hsin
+Lab : MWNL -- Mobile & Wireless Networking Labtory
+Advisor : S.T. Sheu
+Copyright @Brandon, @Yu-Hsin Chuang, @Chuang, Yu-Hsin.
+All rights reserved.
+
+Created in 2023/03
+'''
+
+
 import argparse
 from random import randrange
 from .envs.env import RAN_system
@@ -5,13 +16,14 @@ from .agent import Agent
 import li_sche.utils.pysctp.sctp as sctp
 from .envs.msg import *
 from .envs.thread import Socket_Thread
+from .envs.env import uplink_channel, downlink_channel
 
 class System():
     ### Init
     def __init__(self, args: argparse.Namespace, send_sock : sctp.sctpsocket_tcp, recv_sock : sctp.sctpsocket_tcp):
         # Agent
         self.agent = Agent(args = args, send_sock = send_sock, recv_sock = recv_sock)
-        self.env = RAN_system(args = args, send_sock = send_sock, recv_sock = recv_sock)
+        self.env = RAN_system(args = args)
         self.recv_sock = recv_sock
         self.send_sock = send_sock
  
@@ -21,32 +33,19 @@ class System():
         return state
 
     ############################### Test ############################## 
-    def callback(self, msg):
-        print(msg)
-        pass
-
     def test_system(self):
+        print("This is the testing process to check if the system is working")
         state = self.env.reset()
         done = False
-        
-        receive_thread = Socket_Thread(name = "Rx_thread", socket = self.recv_sock, callback = self.callback)
-        receive_thread.run()
 
+        receive_thread = Socket_Thread(name = "Rx_thread", socket = self.recv_sock, callback = uplink_channel)
+        receive_thread.start()
+
+        print("test")
         while not done:
-
-            used_rb = 0
-            if state.schedule_slot_info == 'U':
-                for i in range(len(ul_uelist)):
-                    ul_uelist[i].set_Group(randrange(4))
-                    ul_uelist[i].set_RB(1)
-                    used_rb += 1
-                    # print(rf'used_rb ${used_rb}')
-                    if used_rb > 246:
-                        break
-
-            state, reward, done = self.env.step(action = ul_uelist)
-            slot += 1
-            print(f'{state}, {reward}, {done}', end = '\n')
+            print("test")
+            self.send_sock.sctp_send("test")
+            
     ###################################################################
 
 

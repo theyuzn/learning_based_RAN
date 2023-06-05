@@ -1,3 +1,14 @@
+'''
+Creater Chuang, Yu-Hsin
+Lab : MWNL -- Mobile & Wireless Networking Labtory
+Advisor : S.T. Sheu
+Copyright @Brandon, @Yu-Hsin Chuang, @Chuang, Yu-Hsin.
+All rights reserved.
+
+Created in 2023/03
+'''
+
+
 import argparse
 from li_sche.multiagent_dqn.system import System
 import socket
@@ -5,12 +16,9 @@ import li_sche.utils.pysctp.sctp as sctp
 
 parser = argparse.ArgumentParser(description='Configuration')
 ########################################## RAN parameter ##########################################
-parser.add_argument('--bw', default=400,type=int,help='channel bandwidth in MHz')
-parser.add_argument('--mu', default=3, type=int,help='the numerology')
+parser.add_argument('--bw', default=400, type=int,help='channel bandwidth in MHz')
+parser.add_argument('--mu', default=3,   type=int,help='the numerology')
 parser.add_argument('--rb', default=264,type=int,help='number of available RB')
-parser.add_argument('--k0', default=0, type=int, help='k0 parameter')
-parser.add_argument('--k1', default=2, type=int, help='k1 parameter')
-parser.add_argument('--k2', default=4, type=int, help='k2 parameter')
 
 ########################################## DQN parameter ##########################################
 parser.add_argument('--model', default='dqn', type=str, help='forcefully set step')
@@ -42,8 +50,8 @@ SEND_PORT = 3334
 SERVER_HOST="172.17.0.2"
 MAX_BUFFER_SIZE = 65535
 
-def main(parser: argparse.Namespace): 
-
+import numpy as np
+def main(parser: argparse.Namespace):
     '''
     To emulate the Rx and Tx, I create two socket
     recv_sock is responsible for the Rx antenna
@@ -62,9 +70,12 @@ def main(parser: argparse.Namespace):
     server_recv_sock.listen(5)
     server_recv_sock.events.data_io = 1
     server_recv_sock.events.clear()
+    print("=========================================")
     print("Waiting for UE's Tx conntenion")
     recv_sock, _ = server_recv_sock.accept()
-    print(f"recv_sock is connected.")
+    print(f"recv_sock is connected.\nUplink channel is established.")
+    print("=========================================")
+
 
     # For Tx antenna
     server_send_sock = sctp.sctpsocket(socket.AF_INET, socket.SOCK_STREAM, None)
@@ -77,7 +88,9 @@ def main(parser: argparse.Namespace):
 
     print("Waiting for UE's Rx conntenion")
     send_sock, _ = server_send_sock.accept()
-    print(f"send_sock is connected.")
+    print(f"send_sock is connected.\nDownlink channel is established.")
+    print("=========================================")
+
     
     
     # Initial the system
