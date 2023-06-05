@@ -15,5 +15,4 @@ class Socket_Thread(threading.Thread):
             fromaddr, flags, msg, notif = self.socket.sctp_recv(self.buffer_size)
             self.callback(msg)
 
-
         print("The thread ends! Bye!")

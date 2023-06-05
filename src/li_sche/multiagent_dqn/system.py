@@ -8,43 +8,31 @@ All rights reserved.
 Created in 2023/03
 '''
 
-
 import argparse
 from random import randrange
 from .envs.env import RAN_system
 from .agent import Agent
 import li_sche.utils.pysctp.sctp as sctp
 from .envs.msg import *
-from .envs.thread import Socket_Thread
-from .envs.env import uplink_channel, downlink_channel
 
 class System():
-    ### Init
     def __init__(self, args: argparse.Namespace, send_sock : sctp.sctpsocket_tcp, recv_sock : sctp.sctpsocket_tcp):
         # Agent
         self.agent = Agent(args = args, send_sock = send_sock, recv_sock = recv_sock)
-        self.env = RAN_system(args = args)
-        self.recv_sock = recv_sock
-        self.send_sock = send_sock
- 
-    ### Get initial states
-    def get_initial_states(self):
-        state = self.env.reset()
-        return state
+        self.env = RAN_system(args = args, send_sock = send_sock, recv_sock = recv_sock)
+
 
     ############################### Test ############################## 
-    def test_system(self):
-        print("This is the testing process to check if the system is working")
-        state = self.env.reset()
-        done = False
-
-        receive_thread = Socket_Thread(name = "Rx_thread", socket = self.recv_sock, callback = uplink_channel)
-        receive_thread.start()
-
-        print("test")
+    def test_agent(self):
+        print("\n\n[ This is the testing process to check if the system is working. ]\n\n")
+        state_tuple, reward, done = self.env.init()
         while not done:
-            print("test")
-            self.send_sock.sctp_send("test")
+            
+            
+
+            # print("test")
+            state_tuple, reward, done = self.env.step()
+
             
     ###################################################################
 

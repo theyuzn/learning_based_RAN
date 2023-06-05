@@ -10,12 +10,16 @@ Created in 2023/03
 
 import argparse
 import math
-from .ue import UE
 import random
+import numpy as np
 import li_sche.utils.pysctp.sctp as sctp
-from .msg import MSG
 
-from .thread import Socket_Thread
+from collections import namedtuple
+from .ue import UE
+from thread import Socket_Thread
+from msg import *
+
+
 
 ## Constant
 # k0 = 0, k1 = 0 ~ 2, k2 = 3
@@ -35,12 +39,19 @@ SIZE_PER_RB         = 400
 
 
 # This is the uplink channel for gNB
-def uplink_channel(msg):
-    pass
+def uplink_channel(msg : bytes):
+    uci = UCI()
+    uci.decode_msg(int.from_bytes(msg, "big"))
+
+    # To deal deal with the UCI
+    # TODO ...
+    
+    
 
 # This is the downlink channel for gNB
-def downlink_channel(msg):
-    pass
+def downlink_channel(send_sock : sctp.sctpsocket_tcp, msg : np.uint64):
+    msg = int(msg).to_bytes(16, "big")
+    send_sock.sctp_send(msg)
 
 class RAN:
     def __init__(self, 
@@ -62,24 +73,6 @@ class RAN:
         self.pattern_p      = pattern_p
 
 
-class State :
-    def __init__(self, 
-                 current_slot_info = 'D',
-                 schedule_slot_info = 'D',
-                 ul_req = list()):
-        self.current_slot_info = current_slot_info
-        self.schedule_slot_info = schedule_slot_info
-        self.ul_req = ul_req
-
-    def reset(self):
-        self.current_slot_info = 'D'
-        self.schedule_slot_info = 'D'
-        self.ul_req = list()
-
-    def rm_ue(self, ue : UE):
-        self.ul_req.remove(ue)
- 
-
 class RAN_system(RAN):
     '''
     ### Purpose
@@ -87,17 +80,14 @@ class RAN_system(RAN):
     Without considering the 1.Fairness, 2.Channel Condition.
 
     ### RAN system
+    This is palying a role as the state in DRL.
     Input is alway the UE's request (i.e., Uplink msg)
     Ex. : UCI (i.e., scheduling request / Special slot) and Data (i.e., UL data + BSR / UL slot)
 
-    Output is the State@class which contains the system information
-    The State is consist of Current slot + Sche slot + UL_req
-    For agent to train or inference the scheduler algorithm
     
     The scheduling result is sent to UE through DCI msg in DL Slot.
 
-    * How to implement the msg transmission between UE entity and gNB entity ?
-        Use SCTP socket to send the msg.
+    * Msg transmission between UE entity and gNB entity is implemented by the SCTP socket programming.
     * The DCI is sent from gNB to UE (over PDCCU) in DL slot or Special slot
     * The UCL is sent from UE to gNB (over PUCCH) in Special slot
     * The msg is sent from UE to gNB (over PUSCH) in UL slot
@@ -115,33 +105,32 @@ class RAN_system(RAN):
     5. The Federated Learning in UE side.
     6. Cooperative multi-agent in the both side (UE and gNB)
     '''
-    def __init__(self, args : argparse.Namespace):
+    def __init__(self, args : argparse.Namespace, send_sock : sctp.sctpsocket_tcp, recv_sock : sctp.sctpsocket_tcp):
         super(RAN_system, self).__init__(BW = args.bw,
                                         numerology = args.mu,
                                         nrofRB = args.rb)
+        self.Transition = namedtuple('State_Tuple', ('frame', 'slot', 'ul_req'))
+        self.recv_sock = recv_sock
+        self.send_sock = send_sock
         self.frame = 0
         self.slot = 0
         self.args = args
         self.done = False
         self.ul_req = list()
+        receive_thread = Socket_Thread(name = "UE_thread", socket = recv_sock, callback = uplink_channel)
+        receive_thread.start()
 
     ### Return 'D'; 'S'; 'U'
-    def _get_slot_info(self, slot):
+    def get_slot_info(self, slot):
         return self.slot_pattern[slot % self.pattern_p]
 
     def init(self):
+        self.frame = 0
         self.slot = 0
-        schedule_slot_info = self._get_slot_info(self.slot + PRE_SCHE_SLOT)
-        current_slot_info = self._get_slot_info(self.slot)
-        self.ul_req = list()
         self.done = False
-
-        return State(current_slot_info = current_slot_info,  
-                     schedule_slot_info= schedule_slot_info, 
-                     ul_req = self.ul_req)
-    
-    def reset(self):
-        return self.init()
+        state_tuple = self.Transition(frame = self.frame, slot = self.slot, ul_req = self.ul_req)
+        reward = 0
+        return state_tuple, reward, self.done
     
 
     def _reward(self, 
@@ -166,19 +155,6 @@ class RAN_system(RAN):
                                 + weight_suc[group_id] * success_number_map[group_id] \
                                     - weight_col[group_id] * collision_number_map[group_id]
         
-        return reward
-    
-
-
-    ### Return reward
-    def send_DCI(self, slot_info):
-        ## Current slot calculate reward
-        reward = self._reward(slot_information = slot_info)
-        return reward
-    
-    def harq(self, slot_info):
-        ## Current slot calculate reward
-        reward = self._reward(slot_information = slot_info)
         return reward
     
 
@@ -284,7 +260,7 @@ class RAN_system(RAN):
 
     def step(self, action:list):
         # To calculate the reward
-        current_slot_info = self._get_slot_info(self.slot)
+        current_slot_info = self.get_slot_info(self.slot)
         reward = 0
         match current_slot_info:
             case 'D':
@@ -297,8 +273,8 @@ class RAN_system(RAN):
 
         ## Update state
         self.slot += 1
-        schedule_slot_info = self._get_slot_info(self.slot + PRE_SCHE_SLOT)
-        current_slot_info = self._get_slot_info(self.slot)
+        schedule_slot_info = self.get_slot_info(self.slot + PRE_SCHE_SLOT)
+        current_slot_info = self.get_slot_info(self.slot)
 
         ## Update the UEs which have been already scheduled
         for i in range(len(self.ul_uelist)):
@@ -323,6 +299,6 @@ class RAN_system(RAN):
         if len(self.temp_UE_list) == 0 and len(self.ul_uelist) == 0:
             self.done = True
 
-        next_state = State(schedule_slot_info = schedule_slot_info, ul_uelist = self.ul_uelist)
+        next_state_tuple = self.Transition(frame = self.frame, slot = self.slot)
 
-        return next_state, reward, self.done
+        return next_state_tuple, reward, self.done

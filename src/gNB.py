@@ -10,9 +10,12 @@ Created in 2023/03
 
 
 import argparse
-from li_sche.multiagent_dqn.system import System
+import time
 import socket
+import numpy as np
 import li_sche.utils.pysctp.sctp as sctp
+
+from li_sche.multiagent_dqn.system import System
 
 parser = argparse.ArgumentParser(description='Configuration')
 ########################################## RAN parameter ##########################################
@@ -50,7 +53,6 @@ SEND_PORT = 3334
 SERVER_HOST="172.17.0.2"
 MAX_BUFFER_SIZE = 65535
 
-import numpy as np
 def main(parser: argparse.Namespace):
     '''
     To emulate the Rx and Tx, I create two socket
@@ -70,7 +72,6 @@ def main(parser: argparse.Namespace):
     server_recv_sock.listen(5)
     server_recv_sock.events.data_io = 1
     server_recv_sock.events.clear()
-    print("=========================================")
     print("Waiting for UE's Tx conntenion")
     recv_sock, _ = server_recv_sock.accept()
     print(f"recv_sock is connected.\nUplink channel is established.")
@@ -100,9 +101,12 @@ def main(parser: argparse.Namespace):
     scheduler = parser.scheduler
     match scheduler:
         # Perform testing in the system
-        case "test":
-            system.test_system()
+        case "Test":
+            system.test_agent()
             return
+        
+        case "test":
+            system.test_agent()
         
         ## Perform lightweight scheduler using DQN
         case "Li":
@@ -118,6 +122,8 @@ def main(parser: argparse.Namespace):
             system.RR()
             return
 
+
+    time.sleep(1)
     recv_sock.close()
     send_sock.close()
     server_recv_sock.close()

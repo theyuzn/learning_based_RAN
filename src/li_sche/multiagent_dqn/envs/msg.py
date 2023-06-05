@@ -1,5 +1,10 @@
 import numpy as np
 
+
+## Constant
+INITIAL=0x0000000000000000
+END=0xffff000000000000
+
 class MSG:
     def __init__(self):
         '''
@@ -361,12 +366,7 @@ class DCI_0_0(DCI):
         # unpack contention size    // 16 bits
         pos += 16
         self.contention_size = (self.payload >> (dci_size - pos)) & ((1 << 16) - 1)
-
-
         
-
-
-
 
 # This msg is carried on PUCCH Physical Uplink Control Channel
 # [ 3GPP TS 38.212 - 6.3.1.1 / 6.3.2.1]
@@ -376,6 +376,7 @@ class UCI(MSG):
         self.ACK_NACK = 0
         self.proc_id = 0
         self.SR = 0
+        self.UE_id = 0
         self.CSI = 0
 
     def fill_payload(self):
@@ -401,3 +402,28 @@ class UCI(MSG):
         # fill the CSI              // 4 bits
         pos += 4
         self.payload |= (np.uint64(self.CSI) & 0xf) << (uci_size - pos)
+
+    def decode_msg(self, msg : np.uint64):
+        uci_size = 64
+        pos = 0
+
+        # unpack the header          // 16 bits
+        pos += 16
+        self.header = (self.payload >> (uci_size - pos)) & ((1 << 16) - 1)
+        self.UE_id = self.header
+
+        # unpack the proc_id
+        pos += 4
+        self.proc_id = (self.payload >> (uci_size - pos)) & 0xf
+
+        # unpack the nack/acn
+        pos += 1
+        self.ACK_NACK = (self.payload >> (uci_size - pos)) & 1
+
+        # unpack the SR
+        pos += 1
+        self.SR = (self.payload >> (uci_size - pos)) & 1
+
+        # unpack the CSI
+        pos += 4
+        self.SR = (self.payload >> (uci_size - pos)) & 0xf

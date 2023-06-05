@@ -1,12 +1,12 @@
 class UE:
     def __init__(self, 
-                 id,            
-                 total_data,    
-                 rdb,   
-                 service,       
-                 nr5QI,        
-                 errorrate,     
-                 type):
+                 id = 0,            
+                 total_data = 0,    
+                 rdb = 0,   
+                 service = "VoNR",       
+                 nr5QI = "0",        
+                 errorrate = "0",     
+                 type = "eMBB"):
         # ----[==================================]---- #
         # ----[         Common UE Config         ]---- #
         # ----[   Including the statistic data   ]---- #
@@ -18,7 +18,7 @@ class UE:
         self.service = service          # String [VoNR, Video, Live Stream]
         self.nr5QI = nr5QI              # 5QI
         self.errorrate = errorrate      # Errorrate correspond to 5QI
-        self.type=type                  # mMTC for now
+        self.type=type                  # eMBB for now
         self.queuing_delay = list()     # To store the queuing delay (For each packet)
 
 

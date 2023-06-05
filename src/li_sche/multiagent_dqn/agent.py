@@ -19,7 +19,6 @@ import numpy as np
 import torch.optim as optim
 
 from .envs.ue import UE
-from .envs.env import State
 from .net.brain import Regression_DQN
 from random import randrange
 from .envs.env import RAN_system
@@ -88,7 +87,7 @@ class Agent():
         self.epsilon = EPSILON_START
 
         # Environment
-        self.env = RAN_system(args=args)
+        self.env = RAN_system(args=args, send_sock = send_sock, recv_sock = recv_sock)
         self.step = 0
 
         # DQN Model
@@ -100,60 +99,60 @@ class Agent():
         self.shared_rb_optimizer = optim.AdamW(self.shared_rb_policy_net.parameters(), lr=LEARNING_RATE, amsgrad = True)
 
     ########################## Preprocessing ##########################
-    def preprocessing(self, state : State):
-        if len(state.ul_uelist) < 1:
-            return np.empty(0)
+    def preprocessing(self, state : namedtuple):
+        # if len(state.ul_uelist) < 1:
+        #     return np.empty(0)
         
-        nrofULUE = len(state.ul_uelist)
-        state_ndarray = np.zeros(12)
-        data_size_ndarray = np.zeros(nrofULUE)
-        delay_bound_ndarray = np.zeros(nrofULUE)
-        ue : UE
-        state_idx = 0
-        total_size = 0
+        # nrofULUE = len(state.ul_uelist)
+        # state_ndarray = np.zeros(12)
+        # data_size_ndarray = np.zeros(nrofULUE)
+        # delay_bound_ndarray = np.zeros(nrofULUE)
+        # ue : UE
+        # state_idx = 0
+        # total_size = 0
 
-        ### Initial all the data
-        i = 0
-        for ue in state.ul_uelist :
-            data_size_ndarray[i] = ue.sizeOfData
-            total_size += ue.sizeOfData
-            delay_bound_ndarray[i] = ue.delay_bound
-            i += 1
+        # ### Initial all the data
+        # i = 0
+        # for ue in state.ul_uelist :
+        #     data_size_ndarray[i] = ue.sizeOfData
+        #     total_size += ue.sizeOfData
+        #     delay_bound_ndarray[i] = ue.delay_bound
+        #     i += 1
 
-        state_ndarray[state_idx] = nrofULUE
-        state_idx += 1
-        state_ndarray[state_idx] = total_size
-        state_idx += 1
+        # state_ndarray[state_idx] = nrofULUE
+        # state_idx += 1
+        # state_ndarray[state_idx] = total_size
+        # state_idx += 1
         
-        data_size_ndarray.sort(axis=0, kind='mergesort')
-        size_top = data_size_ndarray[nrofULUE - 1]
-        size_bottom = data_size_ndarray[0]
-        size_range = size_top - size_bottom
+        # data_size_ndarray.sort(axis=0, kind='mergesort')
+        # size_top = data_size_ndarray[nrofULUE - 1]
+        # size_bottom = data_size_ndarray[0]
+        # size_range = size_top - size_bottom
 
-        step = 0.2
-        for size in data_size_ndarray:
-            while size > size_range*step + size_bottom:
-                state_idx +=1
-                step += STEP
-            state_ndarray[state_idx] += 1
+        # step = 0.2
+        # for size in data_size_ndarray:
+        #     while size > size_range*step + size_bottom:
+        #         state_idx +=1
+        #         step += STEP
+        #     state_ndarray[state_idx] += 1
             
-        state_idx += 1
+        # state_idx += 1
 
-        delay_bound_ndarray.sort(axis=0, kind='mergesort')
-        delay_top = delay_bound_ndarray[nrofULUE - 1]
-        delay_bottom = delay_bound_ndarray[0]
-        delay_range = delay_top - delay_bottom
+        # delay_bound_ndarray.sort(axis=0, kind='mergesort')
+        # delay_top = delay_bound_ndarray[nrofULUE - 1]
+        # delay_bottom = delay_bound_ndarray[0]
+        # delay_range = delay_top - delay_bottom
 
-        step = 0.2
-        for delay in delay_bound_ndarray:
-            while delay > delay_range*step + delay_bottom:
-                state_idx +=1
-                step += STEP
-            state_ndarray[state_idx] += 1
-        state_idx += 1
+        # step = 0.2
+        # for delay in delay_bound_ndarray:
+        #     while delay > delay_range*step + delay_bottom:
+        #         state_idx +=1
+        #         step += STEP
+        #     state_ndarray[state_idx] += 1
+        # state_idx += 1
 
         ### Return the processed state array
-        return state_ndarray
+        return 0
     ###################################################################
 
     def DL_slot(self):

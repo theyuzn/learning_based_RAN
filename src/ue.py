@@ -67,6 +67,7 @@ def downlink_channel(msg : bytes):
     global system_frame, system_slot, UE_List, done
     match header:
         case "Init":
+            print("[UE] Initial is about to processing")
             system_frame = 0
             system_slot = 0
             done = False
@@ -74,6 +75,8 @@ def downlink_channel(msg : bytes):
             path = f"{os.path.dirname(__file__)}/data/uedata.json"
             with open(path, 'r') as ue_file:
                 UE_List = json.load(ue_file,object_hook=decode_json) 
+            
+            print("[UE] Initial is done")
 
         case "End":
             done = True
@@ -114,21 +117,21 @@ def main():
 
 
     receive_thread = Socket_Thread(name = "UE_thread", socket = recv_sock, callback = downlink_channel)
-    receive_thread.run()
+    receive_thread.start()
     
 
     ## Initial ##
     global system_frame, system_slot, UE_List, done
    
 
-    while len(UE_List) > 0 or not done:
-        pass
+    while len(UE_List) > 0 and not done:
+        print("test")
+        
 
    
 
             
-
-
+    time.sleep(1)
     send_sock.close()
     recv_sock.close()
 
