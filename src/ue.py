@@ -57,9 +57,10 @@ def callback(msg : bytes):
 
     match header:
         case "Init":
-            global system_frame, system_slot, UE_List
+            global system_frame, system_slot, UE_List, done
             system_frame = 0
             system_slot = 0
+            done = False
             UE_List = list()
             path = f"{os.path.dirname(__file__)}/data/uedata.json"
             with open(path, 'r') as ue_file:
@@ -106,11 +107,8 @@ def main():
     
 
     ## Initial ##
-   
     global system_frame, system_slot, UE_List, done
    
-
-    
 
     while len(UE_List) > 0 or not done:
         pass
