@@ -53,6 +53,8 @@ SEND_PORT = 3334
 SERVER_HOST="172.17.0.2"
 MAX_BUFFER_SIZE = 65535
 
+
+from collections import deque
 def main(parser: argparse.Namespace):
 
     # Test Block # 

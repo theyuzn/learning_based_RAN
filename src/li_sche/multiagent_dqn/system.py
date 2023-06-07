@@ -10,6 +10,7 @@ Created in 2023/03
 
 import argparse
 import li_sche.utils.pysctp.sctp as sctp
+import time
 
 from collections import deque
 from random import randrange
@@ -26,16 +27,27 @@ class System():
 
 
 
-    ############################### Test ############################## 
+    # Schedule the PUSCH and Return the DCI0
+    def schedule_pusch(self, frame, slot, ul_queue):
+        # Only schedule in DL slot due to the DCI0
+        current_slot = self.env.get_slot_info(frame = frame, slot = slot)
+        if current_slot != 'D':
+            return None, None
+        
+        # 
 
-    def schedule_pusch(self):
-        pass
+        # Fill the DCI0
+
+        return None, None
 
     def schedule_pdsch(self):
-        pass
+        return None, None
+        
 
     def schedule_pucch(self):
-        pass
+        return None, None
+
+    ############################### Test ############################## 
 
     def test_agent(self):
         print("\n\n[ This is the testing process to check if the system is working. ]\n\n")
@@ -43,7 +55,7 @@ class System():
         # To initial the state
         state_tuple, reward, done = self.env.init_RAN_system()
         ul_req = list()
-        ul_queue = deque([], maxlen = 65532)
+        ul_queue = deque([], maxlen = 65532) # Max number of the UE
         cumulative_reward = 0
 
         
@@ -56,12 +68,13 @@ class System():
             '''
             frame = state_tuple.frame
             slot = state_tuple.slot
-            ul_req = state_tuple.ul_req
+            # ul_req : list = state_tuple.ul_req
             action = Schedule_Result()    
-
             
             # Schedule the DCI0 and UL Data sequentially
-            dci0, pusch_result = self.schedule_pusch(frame, slot, ul_req, ul_queue) 
+            for ul_ue in ul_req:
+                ul_queue.append(ul_ue)
+            dci0, pusch_result = self.schedule_pusch(frame = frame, slot = slot, ul_queue = ul_queue) 
 
             # Schedule the DCI1 and DL data Sequentially
             dci1, pdsch_result = self.schedule_pdsch()
@@ -70,7 +83,7 @@ class System():
             pucch_result = self.schedule_pucch()
 
             # Process DCI
-            pdcch_result = [dci0, dci1]
+            pdcch_result = []
 
             action.DCCH = pdcch_result
             action.DSCH = pdsch_result
@@ -80,7 +93,8 @@ class System():
 
             
             state_tuple, reward, done = self.env.step(action)
-            cumulative_reward += reward
+            # cumulative_reward += reward
+            time.sleep(0.001)
 
             
     ###################################################################

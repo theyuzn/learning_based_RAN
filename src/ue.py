@@ -21,7 +21,10 @@ from li_sche.multiagent_dqn.envs.thread import Socket_Thread
 
 from li_sche.multiagent_dqn.envs.ue import UE
 from li_sche.multiagent_dqn.envs.msg import *
+import  li_sche.multiagent_dqn.envs.msg as MSG_HDR
 
+
+##################################################################
 # UE data constant
 ID          = 'id'
 SIZE        = 'sizebyte'
@@ -32,7 +35,19 @@ NR5QI       = '5QI'
 ER          = 'errorrate'
 TYPE        = 'type'
 
+# Constant        
+BUFFERSIZE = 65535
+
+# Global variables ##
+system_frame = 0
+system_slot = 0
+done = False
+UE_List = list()
 i = 0
+##################################################################
+def LOG(log):
+    print(f"[UE] --> {log}")
+
 def decode_json(dct):
     global i
     i += 1
@@ -46,28 +61,19 @@ def decode_json(dct):
                 type            = dct[TYPE])
 
 
-## Constant        
-BUFFERSIZE = 65535
-
-## Global variables ##
-system_frame = 0
-system_slot = 0
-done = False
-UE_List = list()
-######################
-
 def decode_msg(self, msg : np.uint64):
     pass
 
 def downlink_channel(msg : bytes):
     recv_msg = MSG()
-    recv_msg.payload = int.from_bytes(msg, "big")
+    msg = int.from_bytes(msg, "big")
+    recv_msg.payload = msg
     header = recv_msg.decode_header()
 
     global system_frame, system_slot, UE_List, done
     match header:
-        case "Init":
-            print("[UE] Initial is about to processing")
+        case MSG_HDR.HDR_INIT:
+            LOG("Initial is about to processing")
             system_frame = 0
             system_slot = 0
             done = False
@@ -75,20 +81,21 @@ def downlink_channel(msg : bytes):
             path = f"{os.path.dirname(__file__)}/data/uedata.json"
             with open(path, 'r') as ue_file:
                 UE_List = json.load(ue_file,object_hook=decode_json) 
-            
-            print("[UE] Initial is done")
+            LOG("Initial is done")
 
-        case "End":
+        case MSG_HDR.HDR_END:
+            print("oiasudoiaudoiasudiosaduopiasudiopaudopiasudpoaisdupoiasdupsoi")
             done = True
 
-        case "Sync":
+        case MSG_HDR.HDR_SYNC:
             sync_msg = SYNC()
             sync_msg.payload = msg
             sync_msg.decode_msg()
             system_frame = sync_msg.frame
             system_slot = sync_msg.slot
+            LOG(f"Slot indication ==> Frame : {system_frame}, Slot : {system_slot}")
 
-        case "Msg":
+        case _:
             
             pass
 
@@ -116,7 +123,7 @@ def main():
     recv_sock.connect(("172.17.0.2", 3334))
 
 
-    receive_thread = Socket_Thread(name = "UE_thread", socket = recv_sock, callback = downlink_channel)
+    receive_thread = Socket_Thread(name = "DL_Thread", socket = recv_sock, callback = downlink_channel)
     receive_thread.start()
     
 
@@ -124,8 +131,9 @@ def main():
     global system_frame, system_slot, UE_List, done
    
 
-    while len(UE_List) > 0 and not done:
-        print("test")
+    while not done:
+        # print(done)
+        continue
         
 
    

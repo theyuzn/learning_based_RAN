@@ -102,7 +102,6 @@ class RAN_system(RAN):
                                         numerology = args.mu,
                                         nrofRB = args.rb)
         self.State_Transition = namedtuple('State_Tuple', ('frame', 'slot', 'ul_req'))
-        self.Schedule_Transition = namedtuple('Scheule_Tuple', ('DCCH', 'DSCH', 'UCCH', 'USCH'))
         self.recv_sock = recv_sock
         self.send_sock = send_sock
         self.frame = 0
@@ -110,13 +109,21 @@ class RAN_system(RAN):
         self.args = args
         self.done = False
         self.ul_req = list()
-        receive_thread = Socket_Thread(name = "UE_thread", socket = recv_sock, callback = self.uplink_channel)
+        receive_thread = Socket_Thread(name = "UL_Thread", socket = recv_sock, callback = self.uplink_channel)
         receive_thread.start()
 
     def init_RAN_system(self):
+        # Inform UE entity
+        init_msg = MSG()
+        init_msg.header = HDR_INIT
+        init_msg.fill_payload()
+        self.downlink_channel(init_msg.payload)
+
+        # Initial the system
         self.frame = 0
         self.slot = 0
         self.done = False
+        self.ul_req = list()
         reward = 0
         state_tuple = self.State_Transition(frame = self.frame, slot = self.slot, ul_req = self.ul_req)
         return state_tuple, reward, self.done
@@ -129,19 +136,18 @@ class RAN_system(RAN):
         return self.slot_pattern[cumulated_slot % self.pattern_p]
     
     def uplink_channel(self, msg : bytes):
-        uci = UCI()
-        uci.decode_msg(int.from_bytes(msg, "big"))
+        
 
         # To deal deal with the UCI
         # TODO ...
+        pass
         
-    def downlink_channel(self, msg : np.uint64):
-        msg = int(msg).to_bytes(16, "big")
+    def downlink_channel(self, msg : int):
+        print(f"[gNB] Sned {bin(msg)}")
+        msg = msg.to_bytes(16, "big")
+        print(msg)
         self.send_sock.sctp_send(msg)
 
-
-
-    
 
     def contenion(self, action : list, slot_info):
         ### The highest level parameterm
@@ -254,27 +260,50 @@ class RAN_system(RAN):
     
 
     def step(self, schedule : Schedule_Result):
+        # Update the slot
+        self.slot += 1
+        if self.slot >= self.spf:
+            self.slot = 0
+            self.frame += 1
 
-        # Slot indication
+        if self.frame >= SIMULATION_FRAME:
+            self.done = True
+        
+        # Inform the UE entity
+        if self.done:
+            end_msg = MSG()
+            end_msg.header = HDR_END
+            end_msg.fill_payload()
+            self.downlink_channel(end_msg.payload)
+            next_state_tuple = self.State_Transition(frame = self.frame, slot = self.slot, ul_req = [])
+            return next_state_tuple, 0, self.done
+
+        
+        # Slot indication to UE entity
         slot_ind = SYNC()
         slot_ind.frame = self.frame
         slot_ind.slot = self.slot
-        self.downlink_channel(slot_ind.fill_payload())
+        slot_ind.fill_payload()
+        self.downlink_channel(slot_ind.payload)
 
         # Tx / Rx 
-        current_slot_info = self.get_slot_info(self.slot)
+        current_slot_info = self.get_slot_info(self.frame, self.slot)
         
 
         reward = 0
         match current_slot_info:
             case 'D':
-                reward = self.send_DCI(slot_info = 'D')
+                # reward = self.send_DCI(slot_info = 'D')
+                pass
             case 'S':
-                reward = self.harq(slot_info = 'S')
+                # reward = self.harq(slot_info = 'S')
+                pass
             case 'U':
-                reward = self.contenion(action = action, slot_info = 'U')
+                # reward = self.contenion(action = action, slot_info = 'U')
+                pass
 
+        
 
-        next_state_tuple = self.Transition(frame = self.frame, slot = self.slot)
-
+        
+        next_state_tuple = self.State_Transition(frame = self.frame, slot = self.slot, ul_req = [])
         return next_state_tuple, reward, self.done
