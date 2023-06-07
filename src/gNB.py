@@ -54,6 +54,10 @@ SERVER_HOST="172.17.0.2"
 MAX_BUFFER_SIZE = 65535
 
 def main(parser: argparse.Namespace):
+
+    # Test Block # 
+    
+    ##############
     '''
     To emulate the Rx and Tx, I create two socket
     recv_sock is responsible for the Rx antenna

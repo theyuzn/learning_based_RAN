@@ -9,11 +9,14 @@ Created in 2023/03
 '''
 
 import argparse
-from random import randrange
-from .envs.env import RAN_system
-from .agent import Agent
 import li_sche.utils.pysctp.sctp as sctp
+
+from collections import deque
+from random import randrange
+from .agent import Agent
+from .envs.env import RAN_system, Schedule_Result
 from .envs.msg import *
+from .envs.ue import UE 
 
 class System():
     def __init__(self, args: argparse.Namespace, send_sock : sctp.sctpsocket_tcp, recv_sock : sctp.sctpsocket_tcp):
@@ -22,16 +25,62 @@ class System():
         self.env = RAN_system(args = args, send_sock = send_sock, recv_sock = recv_sock)
 
 
+
     ############################### Test ############################## 
+
+    def schedule_pusch(self):
+        pass
+
+    def schedule_pdsch(self):
+        pass
+
+    def schedule_pucch(self):
+        pass
+
     def test_agent(self):
         print("\n\n[ This is the testing process to check if the system is working. ]\n\n")
-        state_tuple, reward, done = self.env.init()
+
+        # To initial the state
+        state_tuple, reward, done = self.env.init_RAN_system()
+        ul_req = list()
+        ul_queue = deque([], maxlen = 65532)
+        cumulative_reward = 0
+
+        
         while not done:
+            '''
+            This idea is from OAI
+            1.) Schedule PUSCH and DCI0
+            2.) Schedule PDSCH and DCI1
+            3.) Schedule PUCCH for UCI
+            '''
+            frame = state_tuple.frame
+            slot = state_tuple.slot
+            ul_req = state_tuple.ul_req
+            action = Schedule_Result()    
+
             
+            # Schedule the DCI0 and UL Data sequentially
+            dci0, pusch_result = self.schedule_pusch(frame, slot, ul_req, ul_queue) 
+
+            # Schedule the DCI1 and DL data Sequentially
+            dci1, pdsch_result = self.schedule_pdsch()
+
+            # Schedule the PUCCH
+            pucch_result = self.schedule_pucch()
+
+            # Process DCI
+            pdcch_result = [dci0, dci1]
+
+            action.DCCH = pdcch_result
+            action.DSCH = pdsch_result
+            action.UCCH = pucch_result
+            action.USCH = pusch_result
             
 
-            # print("test")
-            state_tuple, reward, done = self.env.step()
+            
+            state_tuple, reward, done = self.env.step(action)
+            cumulative_reward += reward
 
             
     ###################################################################

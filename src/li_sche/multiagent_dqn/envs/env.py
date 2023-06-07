@@ -16,8 +16,8 @@ import li_sche.utils.pysctp.sctp as sctp
 
 from collections import namedtuple
 from .ue import UE
-from thread import Socket_Thread
-from msg import *
+from .thread import Socket_Thread
+from .msg import *
 
 
 
@@ -37,26 +37,10 @@ MAX_GROUP           = 4
 PRE_SCHE_SLOT       = 6
 SIZE_PER_RB         = 400
 
-
-# This is the uplink channel for gNB
-def uplink_channel(msg : bytes):
-    uci = UCI()
-    uci.decode_msg(int.from_bytes(msg, "big"))
-
-    # To deal deal with the UCI
-    # TODO ...
-    
-    
-
-# This is the downlink channel for gNB
-def downlink_channel(send_sock : sctp.sctpsocket_tcp, msg : np.uint64):
-    msg = int(msg).to_bytes(16, "big")
-    send_sock.sctp_send(msg)
-
 class RAN:
     def __init__(self, 
-                 BW         = 40, 
-                 numerology = 1, 
+                 BW         = 1600, #MHz 
+                 numerology = 5, 
                  nrofRB     = 248, 
                  k0         = 0,
                  k1         = 1,
@@ -71,6 +55,14 @@ class RAN:
         self.k2             = k2
         self.slot_pattern   = slot_pattern
         self.pattern_p      = pattern_p
+        self.spf            = 10 * 2 * pow(2, numerology)
+
+class Schedule_Result:
+    def __init__(self):
+        self.DCCH = None    # Send the DCI0_0 msg to each UE (Does not send DCI#1_0)
+        self.DSCH = None    # Send DL data (Skip for now...)
+        self.UCCH = None    # UL resources for receiving the UCI
+        self.USCH = None    # UL resources for receiving the UL data from UEs
 
 
 class RAN_system(RAN):
@@ -109,7 +101,8 @@ class RAN_system(RAN):
         super(RAN_system, self).__init__(BW = args.bw,
                                         numerology = args.mu,
                                         nrofRB = args.rb)
-        self.Transition = namedtuple('State_Tuple', ('frame', 'slot', 'ul_req'))
+        self.State_Transition = namedtuple('State_Tuple', ('frame', 'slot', 'ul_req'))
+        self.Schedule_Transition = namedtuple('Scheule_Tuple', ('DCCH', 'DSCH', 'UCCH', 'USCH'))
         self.recv_sock = recv_sock
         self.send_sock = send_sock
         self.frame = 0
@@ -117,45 +110,37 @@ class RAN_system(RAN):
         self.args = args
         self.done = False
         self.ul_req = list()
-        receive_thread = Socket_Thread(name = "UE_thread", socket = recv_sock, callback = uplink_channel)
+        receive_thread = Socket_Thread(name = "UE_thread", socket = recv_sock, callback = self.uplink_channel)
         receive_thread.start()
 
-    ### Return 'D'; 'S'; 'U'
-    def get_slot_info(self, slot):
-        return self.slot_pattern[slot % self.pattern_p]
-
-    def init(self):
+    def init_RAN_system(self):
         self.frame = 0
         self.slot = 0
         self.done = False
-        state_tuple = self.Transition(frame = self.frame, slot = self.slot, ul_req = self.ul_req)
         reward = 0
+        state_tuple = self.State_Transition(frame = self.frame, slot = self.slot, ul_req = self.ul_req)
         return state_tuple, reward, self.done
+
+   
+    # API for every entity
+    def get_slot_info(self, frame, slot):
+        # return 'D'; 'S'; 'U'
+        cumulated_slot = frame*self.spf + slot
+        return self.slot_pattern[cumulated_slot % self.pattern_p]
     
+    def uplink_channel(self, msg : bytes):
+        uci = UCI()
+        uci.decode_msg(int.from_bytes(msg, "big"))
 
-    def _reward(self, 
-               slot_information,
-               collision_number_map : dict = dict(), 
-               success_number_map : dict = dict(),
-               expect_data_map : dict = dict(),
-               success_data_map : dict = dict()):
-        reward = 0
-        ## These weight size equal to MAX_GROUP 
-        weight_recv_data = [1,1,1,1]
-        weight_exp_data = [0.8,0.8,0.8,0.8]
-        weight_col = [1,1,1,1]
-        weight_suc = [1,1,1,1]
-
-        if slot_information == 'D' or slot_information == 'S':
-            return 0
-        else :
-            for group_id in collision_number_map:
-                reward += weight_recv_data[group_id]*success_data_map[group_id] \
-                            - weight_exp_data[group_id] * expect_data_map[group_id] \
-                                + weight_suc[group_id] * success_number_map[group_id] \
-                                    - weight_col[group_id] * collision_number_map[group_id]
+        # To deal deal with the UCI
+        # TODO ...
         
-        return reward
+    def downlink_channel(self, msg : np.uint64):
+        msg = int(msg).to_bytes(16, "big")
+        self.send_sock.sctp_send(msg)
+
+
+
     
 
     def contenion(self, action : list, slot_info):
@@ -258,9 +243,28 @@ class RAN_system(RAN):
 
         return reward
 
-    def step(self, action:list):
-        # To calculate the reward
+    def send_DCI(self):
+        pass
+
+    def recv_UCI(self):
+        pass
+
+    def recv_Data(self):
+        pass
+    
+
+    def step(self, schedule : Schedule_Result):
+
+        # Slot indication
+        slot_ind = SYNC()
+        slot_ind.frame = self.frame
+        slot_ind.slot = self.slot
+        self.downlink_channel(slot_ind.fill_payload())
+
+        # Tx / Rx 
         current_slot_info = self.get_slot_info(self.slot)
+        
+
         reward = 0
         match current_slot_info:
             case 'D':
@@ -270,34 +274,6 @@ class RAN_system(RAN):
             case 'U':
                 reward = self.contenion(action = action, slot_info = 'U')
 
-
-        ## Update state
-        self.slot += 1
-        schedule_slot_info = self.get_slot_info(self.slot + PRE_SCHE_SLOT)
-        current_slot_info = self.get_slot_info(self.slot)
-
-        ## Update the UEs which have been already scheduled
-        for i in range(len(self.ul_uelist)):
-            self.ul_uelist[i].decay_delay(1)
-        ue : UE
-        for ue in self.ul_uelist:
-            if ue.sizeOfData <= 0 or ue.delay_bound <= 0:
-                self.ul_uelist.remove(ue)
-        
-        ## Add other UEs which have not been scheduled if there are some.
-        ## Only in UL slot, the UE can send Scheduling Request
-        if current_slot_info == 'U':
-            for _ in range(MAX_UPLINK_GRANT):
-                if len(self.temp_UE_list):
-                    self.ul_uelist.append(self.temp_UE_list.pop(0))
-                else:
-                    break
-
-
-        if self.slot >= SIMULATION_FRAME * NUMBER_OF_SUBFRAME * math.pow(2, self.numerology):
-            self.done = True
-        if len(self.temp_UE_list) == 0 and len(self.ul_uelist) == 0:
-            self.done = True
 
         next_state_tuple = self.Transition(frame = self.frame, slot = self.slot)
 
