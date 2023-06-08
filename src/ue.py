@@ -41,6 +41,8 @@ BUFFERSIZE = 65535
 # Global variables ##
 system_frame = 0
 system_slot = 0
+system_k0 = 0
+system_k2 = 0
 done = False
 UE_List = list()
 i = 0
@@ -70,26 +72,39 @@ def downlink_channel(msg : bytes):
     recv_msg.payload = msg
     header = recv_msg.decode_header()
 
-    global system_frame, system_slot, UE_List, done
+    global system_frame, system_slot, system_k0, system_k2, UE_List, done
     match header:
         case MSG_HDR.HDR_INIT:
             LOG("Initial is about to processing")
             system_frame = 0
             system_slot = 0
+            system_k0 = 0
+            system_k2 = 0
             done = False
+
+            # Load the UEs
             UE_List = list()
             path = f"{os.path.dirname(__file__)}/data/uedata.json"
             with open(path, 'r') as ue_file:
                 UE_List = json.load(ue_file,object_hook=decode_json) 
+
+            # Unpack the Init msg
+            init_msg = INIT()
+            init_msg.payload = msg
+            init_msg.header = header
+            init_msg.decode_msg()
+            system_k0 = init_msg.k0
+            system_k2 = init_msg.k2
+            LOG(f"RRC connection ==> k0 = {system_k0}, k2 = {system_k2}")
             LOG("Initial is done")
 
         case MSG_HDR.HDR_END:
-            print("oiasudoiaudoiasudiosaduopiasudiopaudopiasudpoaisdupoiasdupsoi")
             done = True
 
         case MSG_HDR.HDR_SYNC:
             sync_msg = SYNC()
             sync_msg.payload = msg
+            sync_msg.header = header
             sync_msg.decode_msg()
             system_frame = sync_msg.frame
             system_slot = sync_msg.slot
@@ -128,11 +143,11 @@ def main():
     
 
     ## Initial ##
-    global system_frame, system_slot, UE_List, done
+    global system_frame, system_slot, system_k0, system_k2, UE_List, done
    
 
     while not done:
-        # print(done)
+
         continue
         
 
@@ -142,6 +157,7 @@ def main():
     time.sleep(1)
     send_sock.close()
     recv_sock.close()
+    LOG("Process is done, BYE!!!")
 
 if __name__ == '__main__':
     main()

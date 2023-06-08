@@ -15,7 +15,7 @@ import socket
 import numpy as np
 import li_sche.utils.pysctp.sctp as sctp
 
-from li_sche.multiagent_dqn.system import System
+from li_sche.multiagent_dqn.algorithms import System
 
 parser = argparse.ArgumentParser(description='Configuration')
 ########################################## RAN parameter ##########################################

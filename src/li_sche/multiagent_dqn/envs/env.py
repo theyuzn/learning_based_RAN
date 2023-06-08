@@ -109,13 +109,13 @@ class RAN_system(RAN):
         self.args = args
         self.done = False
         self.ul_req = list()
-        receive_thread = Socket_Thread(name = "UL_Thread", socket = recv_sock, callback = self.uplink_channel)
-        receive_thread.start()
 
     def init_RAN_system(self):
         # Inform UE entity
-        init_msg = MSG()
+        init_msg = INIT()
         init_msg.header = HDR_INIT
+        init_msg.k0 = self.k0
+        init_msg.k2 = self.k2
         init_msg.fill_payload()
         self.downlink_channel(init_msg.payload)
 
@@ -135,17 +135,18 @@ class RAN_system(RAN):
         cumulated_slot = frame*self.spf + slot
         return self.slot_pattern[cumulated_slot % self.pattern_p]
     
-    def uplink_channel(self, msg : bytes):
-        
-
-        # To deal deal with the UCI
-        # TODO ...
-        pass
+    def uplink_channel(self):
+        ul_end = False
+        msg_list = list()
+        while not ul_end:
+            fromaddr, flags, msg, notif = self.recv_sock.sctp_recv(65535)
+            msg = int.from_bytes(msg, "big")
+            msg_list.append(msg)
+        return msg_list
         
     def downlink_channel(self, msg : int):
         print(f"[gNB] Sned {bin(msg)}")
         msg = msg.to_bytes(16, "big")
-        print(msg)
         self.send_sock.sctp_send(msg)
 
 
@@ -253,10 +254,14 @@ class RAN_system(RAN):
         pass
 
     def recv_UCI(self):
-        pass
+        uci_packets = list()
+        uci_packets = self.uplink_channel()
+        
 
     def recv_Data(self):
-        pass
+        ul_packets = list()
+        ul_packets = self.uplink_channel()
+        
     
 
     def step(self, schedule : Schedule_Result):

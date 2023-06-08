@@ -49,6 +49,43 @@ class MSG:
         self.header = (self.payload >> (size - pos)) & ((1 << 16) - 1)
         return self.header
     
+# RRC setup msg, only get the needed msg
+class INIT(MSG):
+    '''
+            16         4    4                      40
+    |----------------|----|----|-----------------------------------------| 
+          header       k0   k2                   reserved
+    '''
+    def __init__(self):
+        super(INIT, self).__init__()
+        self.k0 : int = 0
+        self.k2 : int = 0
+    
+    def fill_payload(self):
+        self.header = 0b0000000000000000
+        size = 64
+        pos = 0
+
+        pos += 16   # Fill Header
+        self.payload |= (self.header & ((1 << 16) - 1)) << (size - pos)
+
+        pos += 4    # Fill frame
+        self.payload |= (int(self.k0) & 0xf) << (size - pos)
+
+        pos += 4    # Fill slot
+        self.payload |= (int(self.k2) & 0xf) << (size - pos)
+
+    def decode_msg(self):
+        size = 64
+        pos = 16    # skip the header
+
+        pos += 4
+        self.k0 = (int(self.payload) >> (size - pos)) & 0xf
+
+        pos += 4
+        self.k2 = (int(self.payload) >> (size - pos)) & 0xf
+
+    
             
 class SYNC(MSG):
     '''
