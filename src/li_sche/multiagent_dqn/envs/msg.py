@@ -10,6 +10,7 @@ Created in 2023/03
 
 ## Constant Header
 HDR_INIT    = 0b0000000000000000
+HDR_CM_DCI  = 0b1111111111111101
 HDR_SYNC    = 0b1111111111111110
 HDR_END     = 0b1111111111111111
 
@@ -18,10 +19,14 @@ class MSG:
         '''
         1.) DownLink Message
         The payload begins with the header, the msg is identified with this.
+        // Common message
         * If the header = 0b0000000000000000 (0), it is the initial message.
         * If the header = 0b1111111111111111 (65535), it is the ending message.
         * If the header = 0b1111111111111110 (65534), it is the sync message.
-        Otherwise, represent the UE_id (i.e., C_RNTI for UE)
+        * If the header = 0b1111111111111101 (65533), it is the common control message.
+
+        // Dedicated message
+        The header = UE_id, no matter what is the DCI0 or DCI1.
 
         2.) Uplink Message
         * The UCI is focusing on the Scheduling Request (SR) after the header in Special Slot
@@ -52,13 +57,14 @@ class MSG:
 # RRC setup msg, only get the needed msg
 class INIT(MSG):
     '''
-            16         4    4                      40
-    |----------------|----|----|-----------------------------------------| 
-          header       k0   k2                   reserved
+            16         4     4    4                  40
+    |----------------|----|----|----|-------------------------------------| 
+          header       k0   k1   k2                reserved
     '''
     def __init__(self):
         super(INIT, self).__init__()
         self.k0 : int = 0
+        self.k1 : int = 0
         self.k2 : int = 0
     
     def fill_payload(self):
@@ -69,10 +75,13 @@ class INIT(MSG):
         pos += 16   # Fill Header
         self.payload |= (self.header & ((1 << 16) - 1)) << (size - pos)
 
-        pos += 4    # Fill frame
+        pos += 4    # Fill k0
         self.payload |= (int(self.k0) & 0xf) << (size - pos)
 
-        pos += 4    # Fill slot
+        pos += 4    # Fill k1
+        self.payload |= (int(self.k1) & 0xf) << (size - pos)
+
+        pos += 4    # Fill k2
         self.payload |= (int(self.k2) & 0xf) << (size - pos)
 
     def decode_msg(self):
@@ -81,6 +90,9 @@ class INIT(MSG):
 
         pos += 4
         self.k0 = (int(self.payload) >> (size - pos)) & 0xf
+
+        pos += 4
+        self.k1 = (int(self.payload) >> (size - pos)) & 0xf
 
         pos += 4
         self.k2 = (int(self.payload) >> (size - pos)) & 0xf
@@ -421,15 +433,16 @@ class UCI(MSG):
 
 class UL_Data(MSG):
     '''
-            16            8        8                   32
-    |----------------|--------|--------|--------------------------------| 
-          header      Data Size   BSR               reserved
+            16            8        8        10               22
+    |----------------|--------|--------|----------|----------------------| 
+          header      Data Size   BSR       RDB            reserved
     '''
     def __init__(self):
         super(UL_Data, self).__init__()
         self.UE_id : int = 0
         self.payload_size : int = 0 # Along with the BSR index
         self.bsr : int = 0 # short BSR : 5 bits, long BSR : 8 bits
+        self.rdb : int = 0 # Remaining Delay Budget
 
     def fill_payload(self):
         ul_data_size = 64
@@ -445,6 +458,9 @@ class UL_Data(MSG):
         pos += 8
         self.payload |= (int(self.bsr) & 0xff) << (ul_data_size - pos)
 
+        pos += 10
+        self.payload |= (int(self.bsr) & ((1 << 10) - 1)) << (ul_data_size - pos)
+
     def decode_payload(self):
         ul_data_size = 64
         pos = 16            # skip header
@@ -456,3 +472,6 @@ class UL_Data(MSG):
 
         pos += 8
         self.bsr            = (self.payload >> (ul_data_size - pos)) & 0xff
+
+        pos += 10
+        self.rdb            = (self.payload >> (ul_data_size - pos)) & ((1 << 10) - 1)

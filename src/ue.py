@@ -42,6 +42,7 @@ BUFFERSIZE = 65535
 system_frame = 0
 system_slot = 0
 system_k0 = 0
+system_k1 = 0
 system_k2 = 0
 done = False
 UE_List = list()
@@ -72,7 +73,7 @@ def downlink_channel(msg : bytes):
     recv_msg.payload = msg
     header = recv_msg.decode_header()
 
-    global system_frame, system_slot, system_k0, system_k2, UE_List, done
+    global system_frame, system_slot, system_k0, system_k1, system_k2, UE_List, done
     match header:
         case MSG_HDR.HDR_INIT:
             LOG("Initial is about to processing")
@@ -94,6 +95,7 @@ def downlink_channel(msg : bytes):
             init_msg.header = header
             init_msg.decode_msg()
             system_k0 = init_msg.k0
+            system_k1 = init_msg.k1
             system_k2 = init_msg.k2
             LOG(f"RRC connection ==> k0 = {system_k0}, k2 = {system_k2}")
             LOG("Initial is done")
@@ -143,7 +145,7 @@ def main():
     
 
     ## Initial ##
-    global system_frame, system_slot, system_k0, system_k2, UE_List, done
+    global system_frame, system_slot, system_k0, system_k1, system_k2, UE_List, done
    
 
     while not done:

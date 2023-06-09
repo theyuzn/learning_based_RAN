@@ -108,11 +108,11 @@ def main(parser: argparse.Namespace):
     match scheduler:
         # Perform testing in the system
         case "Test":
-            system.test_agent()
+            system.FCFS()
             return
         
         case "test":
-            system.test_agent()
+            system.FCFS()
         
         ## Perform lightweight scheduler using DQN
         case "Li":

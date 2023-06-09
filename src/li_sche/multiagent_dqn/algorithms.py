@@ -28,17 +28,57 @@ class System():
 
 
     # Schedule the PUSCH and Return the DCI0
-    def schedule_pusch(self, frame, slot, ul_queue):
+    def schedule_pusch(self, frame, slot, ul_queue : deque):
+        dci0 = list()
+        pusch = list()
+
         # Only schedule in DL slot due to the DCI0
         current_slot = self.env.get_slot_info(frame = frame, slot = slot)
         if current_slot != 'D':
-            return None, None
+            return dci0, pusch
         
-        # 
+        contention_size = 0
+        schedule_size = 0
+        cumulated_rb = 0
 
-        # Fill the DCI0
+        while len(ul_queue) > 0 :
+            ul_ue : UE = ul_queue.popleft()
+            ul_ue.freq_leng = ul_ue.total_data  / (self.env.tbs_per_RB / 8)
+            ul_ue.time_length = 14
+            ul_ue.start_symbol = 0
+            
 
-        return None, None
+            if ul_ue.rdb <= 2 * self.env.pattern_p:
+                # Schedule
+                ul_ue.contention = False
+                schedule_size += ul_ue.freq_leng
+            else:
+                ul_ue.contention = True
+                contention_size += ul_ue.freq_leng
+            
+            if schedule_size + contention_size >= self.env.nrofRB:
+                ul_queue.appendleft(ul_ue)
+                break
+
+            # Fill DCI0
+            dci = DCI_0_0()
+            dci.header = ul_ue.id
+            dci.UE_id = ul_ue.id
+            dci.frequency_domain_assignment = ul_ue.freq_leng
+            dci.time_domain_resource_assignment = ul_ue.time_length
+            dci.contention = ul_ue.contention
+            if ul_ue.contention:
+                dci.contention_size = contention_size
+            
+            dci.fill_payload()
+            dci0.append(dci.payload)
+
+            # Fill PUSCH result
+            cumulated_rb += ul_ue.freq_leng
+
+        pusch = self.env.PUSCH_Transition(frame = frame, slot = slot+self.env.k2, cumulatied_rb = cumulated_rb)
+        return dci0, pusch
+    
 
     def schedule_pdsch(self):
         return None, None
@@ -47,17 +87,22 @@ class System():
     def schedule_pucch(self):
         return None, None
 
-    ############################### Test ############################## 
 
-    def test_agent(self):
-        print("\n\n[ This is the testing process to check if the system is working. ]\n\n")
+    def first_come_first_serve(users):
+        selected_user = users[0]
+        users.pop(0)
+        return selected_user
+
+    ############################### FCFS ############################## 
+
+    def FCFS(self):
+        print("\n\n[ This is the First-Come-First-Serve ]\n\n")
 
         # To initial the state
         state_tuple, reward, done = self.env.init_RAN_system()
         ul_req = list()
-        ul_queue = deque([], maxlen = 65532) # Max number of the UE
-        cumulative_reward = 0
-
+        ul_queue = deque([], maxlen = 65535) # Max number of the UE
+        cumulative_reward = reward
         
         while not done:
             '''
@@ -68,32 +113,37 @@ class System():
             '''
             frame = state_tuple.frame
             slot = state_tuple.slot
-            # ul_req : list = state_tuple.ul_req
+            ul_req : list = state_tuple.ul_req
             action = Schedule_Result()    
             
-            # Schedule the DCI0 and UL Data sequentially
+            # Update the queue
+            for i in range(len(ul_queue)):
+                ul_queue[i].rdb -= 1
+                ul_queue[i].queuing_delay += 1
+            
             for ul_ue in ul_req:
                 ul_queue.append(ul_ue)
+                
+            # Schedule the DCI0 and UL Data sequentially
             dci0, pusch_result = self.schedule_pusch(frame = frame, slot = slot, ul_queue = ul_queue) 
 
             # Schedule the DCI1 and DL data Sequentially
-            dci1, pdsch_result = self.schedule_pdsch()
+            # dci1, pdsch_result = self.schedule_pdsch()
 
             # Schedule the PUCCH
-            pucch_result = self.schedule_pucch()
+            # pucch_result = self.schedule_pucch()
 
             # Process DCI
-            pdcch_result = []
+            # pdcch_result = []
 
-            action.DCCH = pdcch_result
-            action.DSCH = pdsch_result
-            action.UCCH = pucch_result
+            action.DCCH = dci0
+            # action.DSCH = pdsch_result
+            # action.UCCH = pucch_result
             action.USCH = pusch_result
             
-
             
             state_tuple, reward, done = self.env.step(action)
-            # cumulative_reward += reward
+            cumulative_reward += reward
             time.sleep(0.001)
 
             
@@ -107,10 +157,27 @@ class System():
     ###################################################################
 
 
+    def proportional_fair(users, channel_qualities, previous_throughputs, alpha):
+        priorities = []
+        for i, user in enumerate(users):
+            priority = (1 - alpha) * math.log(1 + channel_qualities[i]) + alpha * previous_throughputs[i]
+            priorities.append(priority)
+
+        selected_user = max(zip(users, priorities), key=lambda x: x[1])[0]
+        return selected_user
+
+
     ############################# Train ###############################
     def PF(self):
+        
         return
     ###################################################################
+
+    def round_robin(users, current_user_index):
+        selected_user = users[current_user_index]
+        current_user_index = (current_user_index + 1) % len(users)
+        return selected_user, current_user_index
+
 
     ############################# Train ###############################
     def RR(self):
@@ -170,3 +237,24 @@ class System():
     #     pylab.imshow(sample_image, cmap='gray')
     #     pylab.show()
 
+
+
+
+# Example usage
+# users = [1, 2, 3, 4, 5]
+# channel_qualities = [0.8, 0.9, 0.7, 0.6, 0.8]
+# previous_throughputs = [10, 15, 12, 9, 11]
+# alpha = 0.5
+
+# # Proportional Fair Algorithm
+# selected_user = proportional_fair(users, channel_qualities, previous_throughputs, alpha)
+# print("Proportional Fair Algorithm - Selected User:", selected_user)
+
+# # Round Robin Algorithm
+# current_user_index = 0
+# selected_user, current_user_index = round_robin(users, current_user_index)
+# print("Round Robin Algorithm - Selected User:", selected_user)
+
+# # First-Come-First-Serve Algorithm
+# selected_user = first_come_first_serve(users)
+# print("First-Come-First-Serve Algorithm - Selected User:", selected_user)

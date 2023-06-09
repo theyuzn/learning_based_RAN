@@ -43,7 +43,7 @@ class RAN:
                  numerology = 5, 
                  nrofRB     = 248, 
                  k0         = 0,
-                 k1         = 1,
+                 k1         = 0,
                  k2         = 3,
                  slot_pattern = SLOT_PATTERN1,
                  pattern_p = PATTERN_P1):
@@ -56,13 +56,14 @@ class RAN:
         self.slot_pattern   = slot_pattern
         self.pattern_p      = pattern_p
         self.spf            = 10 * 2 * pow(2, numerology)
+        self.tbs_per_RB     = 848 # bits For MCS = 27, Layer = 1, each RB
 
 class Schedule_Result:
     def __init__(self):
-        self.DCCH = None    # Send the DCI0_0 msg to each UE (Does not send DCI#1_0)
-        self.DSCH = None    # Send DL data (Skip for now...)
-        self.UCCH = None    # UL resources for receiving the UCI
-        self.USCH = None    # UL resources for receiving the UL data from UEs
+        self.DCCH = list()      # Send the DCI0_0 msg to each UE (Does not send DCI#1_0)
+        self.DSCH = None        # Send DL data (Skip for now...)
+        self.UCCH = list()      # UL resources for receiving the UCI
+        self.USCH = list()      # UL resources for receiving the UL data from UEs
 
 
 class RAN_system(RAN):
@@ -102,6 +103,7 @@ class RAN_system(RAN):
                                         numerology = args.mu,
                                         nrofRB = args.rb)
         self.State_Transition = namedtuple('State_Tuple', ('frame', 'slot', 'ul_req'))
+        self.PUSCH_Transition = namedtuple('PUSCH_Tuple', ('frame', 'slot', 'cumulatied_rb'))
         self.recv_sock = recv_sock
         self.send_sock = send_sock
         self.frame = 0
@@ -265,24 +267,6 @@ class RAN_system(RAN):
     
 
     def step(self, schedule : Schedule_Result):
-        # Update the slot
-        self.slot += 1
-        if self.slot >= self.spf:
-            self.slot = 0
-            self.frame += 1
-
-        if self.frame >= SIMULATION_FRAME:
-            self.done = True
-        
-        # Inform the UE entity
-        if self.done:
-            end_msg = MSG()
-            end_msg.header = HDR_END
-            end_msg.fill_payload()
-            self.downlink_channel(end_msg.payload)
-            next_state_tuple = self.State_Transition(frame = self.frame, slot = self.slot, ul_req = [])
-            return next_state_tuple, 0, self.done
-
         
         # Slot indication to UE entity
         slot_ind = SYNC()
@@ -309,6 +293,21 @@ class RAN_system(RAN):
 
         
 
+        # Update the slot
+        self.slot += 1
+        if self.slot >= self.spf:
+            self.slot = 0
+            self.frame += 1
+
+        if self.frame >= SIMULATION_FRAME:
+            self.done = True
         
+        # Inform the UE entity
+        if self.done:
+            end_msg = MSG()
+            end_msg.header = HDR_END
+            end_msg.fill_payload()
+            self.downlink_channel(end_msg.payload)
+            
         next_state_tuple = self.State_Transition(frame = self.frame, slot = self.slot, ul_req = [])
         return next_state_tuple, reward, self.done
