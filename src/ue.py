@@ -133,11 +133,11 @@ def main():
 
     # The send_sock needs to connect to the recv_sock in the gNB
     send_sock = sctp.sctpsocket_tcp(socket.AF_INET)
-    send_sock.connect(("172.17.0.2", 3333))
+    send_sock.connect(("172.17.0.3", 3333))
     time.sleep(1)
     # The recv_sock needs to connect to the send_sock in the gNB
     recv_sock = sctp.sctpsocket_tcp(socket.AF_INET)
-    recv_sock.connect(("172.17.0.2", 3334))
+    recv_sock.connect(("172.17.0.3", 3334))
 
 
     receive_thread = Socket_Thread(name = "DL_Thread", socket = recv_sock, callback = downlink_channel)

@@ -38,8 +38,8 @@ sudo docker build -t li_sche_pyt . --no-cache
 ```sh
 cd [where_you_clone_this_project]
 
-sudo docker run --mount type=bind,source="$(pwd)"/,target=/workdocker  -it --gpus all --name li_sche_pyt li_sche_pyt bash /bin/bash
-
+# start gNB entity
+sudo docker run --mount type=bind,source="$(pwd)"/,target=/workspace  -it --gpus all --name gNB li_sche_pyt bash
 nvidia-smi
 ```
 
@@ -47,7 +47,7 @@ nvidia-smi
 ```sh
 cd [where_you_clone_this_project]
 
-sudo docker run --mount type=bind,source="$(pwd)"/,target=/workdocker  -it  --name li_sche_pyt li_sche_pyt bash
+sudo docker run --mount type=bind,source="$(pwd)"/,target=/workspace  -it  --name li_sche_pyt li_sche_pyt bash
 ```
 
 ## Build & Run

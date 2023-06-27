@@ -15,7 +15,7 @@ import socket
 import numpy as np
 import li_sche.utils.pysctp.sctp as sctp
 
-from li_sche.multiagent_dqn.algorithms import System
+from li_sche.multiagent_dqn.algorithms import Algorithms
 
 parser = argparse.ArgumentParser(description='Configuration')
 ########################################## RAN parameter ##########################################
@@ -50,7 +50,7 @@ parser: argparse.Namespace = parser.parse_args()
 
 RECV_PORT = 3333
 SEND_PORT = 3334
-SERVER_HOST="172.17.0.2"
+SERVER_HOST="172.17.0.3"
 MAX_BUFFER_SIZE = 65535
 
 
@@ -99,35 +99,31 @@ def main(parser: argparse.Namespace):
     print("=========================================")
 
     
-    
     # Initial the system
-    system = System(args = parser, send_sock = send_sock, recv_sock = recv_sock)
+    alg = Algorithms(args = parser, send_sock = send_sock, recv_sock = recv_sock)
  
     # Running the system
     scheduler = parser.scheduler
+    scheduler = scheduler.lower()
     match scheduler:
         # Perform testing in the system
-        case "Test":
-            system.FCFS()
+        case "fcfs":
+            alg.FCFS()
             return
         
-        case "test":
-            system.FCFS()
-        
         ## Perform lightweight scheduler using DQN
-        case "Li":
-            system.train()
+        case "li":
+            alg.train()
 
         ## Perform Proportional Fairness algorithm
-        case "PF":
-            system.PF()
+        case "pf":
+            alg.PF()
             return
         
         ## Perform Round Robin algorithm
         case "RR":
-            system.RR()
+            alg.RR()
             return
-
 
     time.sleep(1)
     recv_sock.close()

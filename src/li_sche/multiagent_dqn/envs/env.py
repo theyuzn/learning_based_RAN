@@ -12,9 +12,10 @@ import argparse
 import math
 import random
 import numpy as np
+
 import li_sche.utils.pysctp.sctp as sctp
 
-from collections import namedtuple
+from collections import namedtuple, deque
 from .ue import UE
 from .thread import Socket_Thread
 from .msg import *
@@ -103,7 +104,7 @@ class RAN_system(RAN):
                                         numerology = args.mu,
                                         nrofRB = args.rb)
         self.State_Transition = namedtuple('State_Tuple', ('frame', 'slot', 'ul_req'))
-        self.PUSCH_Transition = namedtuple('PUSCH_Tuple', ('frame', 'slot', 'cumulatied_rb'))
+        self.PUSCH_Transition = namedtuple('PUSCH_Tuple', ('frame', 'slot', 'nrof_UE', 'cumulatied_rb'))
         self.recv_sock = recv_sock
         self.send_sock = send_sock
         self.frame = 0
@@ -111,6 +112,7 @@ class RAN_system(RAN):
         self.args = args
         self.done = False
         self.ul_req = list()
+        self.USCH_ra_queue =  deque([], maxlen = 5) # ULSCH resource allocation; depends on the number of UL slot in a aperiod
 
     def init_RAN_system(self):
         # Inform UE entity
@@ -142,6 +144,11 @@ class RAN_system(RAN):
         msg_list = list()
         while not ul_end:
             fromaddr, flags, msg, notif = self.recv_sock.sctp_recv(65535)
+            print(msg)
+            if msg == None:
+                ul_end = True
+                break
+
             msg = int.from_bytes(msg, "big")
             msg_list.append(msg)
         return msg_list
@@ -152,7 +159,7 @@ class RAN_system(RAN):
         self.send_sock.sctp_send(msg)
 
 
-    def contenion(self, action : list, slot_info):
+    def contenion(self, action : list):
         ### The highest level parameterm
         ul_uelist = action
 
@@ -253,21 +260,25 @@ class RAN_system(RAN):
         return reward
 
     def send_DCI(self):
-        pass
+        reward = 0
+        return reward
 
     def recv_UCI(self):
         uci_packets = list()
         uci_packets = self.uplink_channel()
+        reward = 0
+        return reward
         
 
     def recv_Data(self):
         ul_packets = list()
         ul_packets = self.uplink_channel()
+        reward = 0
+        return reward
         
     
 
-    def step(self, schedule : Schedule_Result):
-        
+    def step(self, action : Schedule_Result):
         # Slot indication to UE entity
         slot_ind = SYNC()
         slot_ind.frame = self.frame
@@ -277,21 +288,27 @@ class RAN_system(RAN):
 
         # Tx / Rx 
         current_slot_info = self.get_slot_info(self.frame, self.slot)
-        
 
         reward = 0
         match current_slot_info:
             case 'D':
-                # reward = self.send_DCI(slot_info = 'D')
-                pass
-            case 'S':
-                # reward = self.harq(slot_info = 'S')
-                pass
-            case 'U':
-                # reward = self.contenion(action = action, slot_info = 'U')
-                pass
+                action.DCCH
+                self.USCH_ra_queue.append(action.USCH)
+                reward = self.send_DCI()
 
-        
+            case 'S':
+                reward = self.recv_UCI()
+                
+            case 'U':
+                USCH_ra = self.PUSCH_Transition(self.USCH_ra_queue.popleft())
+                if USCH_ra.frame != self.frame or USCH_ra.slot != self.slot:
+                    reward = -1
+                else:
+                    nrof_UE = USCH_ra.nrof_UE
+                    if nrof_UE > 0:
+                        ul_data = self.uplink_channel()
+                        reward = self.contenion()
+                
 
         # Update the slot
         self.slot += 1

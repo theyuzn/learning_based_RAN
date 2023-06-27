@@ -19,12 +19,11 @@ from .envs.env import RAN_system, Schedule_Result
 from .envs.msg import *
 from .envs.ue import UE 
 
-class System():
+class Algorithms():
     def __init__(self, args: argparse.Namespace, send_sock : sctp.sctpsocket_tcp, recv_sock : sctp.sctpsocket_tcp):
         # Agent
         self.agent = Agent(args = args, send_sock = send_sock, recv_sock = recv_sock)
         self.env = RAN_system(args = args, send_sock = send_sock, recv_sock = recv_sock)
-
 
 
     # Schedule the PUSCH and Return the DCI0
@@ -40,6 +39,7 @@ class System():
         contention_size = 0
         schedule_size = 0
         cumulated_rb = 0
+        nrof_UE = 0
 
         while len(ul_queue) > 0 :
             ul_ue : UE = ul_queue.popleft()
@@ -75,8 +75,9 @@ class System():
 
             # Fill PUSCH result
             cumulated_rb += ul_ue.freq_leng
+            nrof_UE += 1
 
-        pusch = self.env.PUSCH_Transition(frame = frame, slot = slot+self.env.k2, cumulatied_rb = cumulated_rb)
+        pusch = self.env.PUSCH_Transition(frame = frame, slot = slot+self.env.k2, nrof_UE = nrof_UE ,cumulatied_rb = cumulated_rb)
         return dci0, pusch
     
 
@@ -87,11 +88,6 @@ class System():
     def schedule_pucch(self):
         return None, None
 
-
-    def first_come_first_serve(users):
-        selected_user = users[0]
-        users.pop(0)
-        return selected_user
 
     ############################### FCFS ############################## 
 
