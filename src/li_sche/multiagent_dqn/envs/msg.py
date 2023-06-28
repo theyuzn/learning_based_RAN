@@ -57,15 +57,16 @@ class MSG:
 # RRC setup msg, only get the needed msg
 class INIT(MSG):
     '''
-            16         4     4    4                  40
-    |----------------|----|----|----|-------------------------------------| 
-          header       k0   k1   k2                reserved
+            16         4     4    4      10                 40
+    |----------------|----|----|----|----------|---------------------------| 
+          header       k0   k1   k2      spf             reserved
     '''
     def __init__(self):
         super(INIT, self).__init__()
         self.k0 : int = 0
         self.k1 : int = 0
         self.k2 : int = 0
+        self.spf : int = 0
     
     def fill_payload(self):
         self.header = 0b0000000000000000
@@ -84,6 +85,9 @@ class INIT(MSG):
         pos += 4    # Fill k2
         self.payload |= (int(self.k2) & 0xf) << (size - pos)
 
+        pos += 10    # Fill k2
+        self.payload |= (int(self.spf) & 0xf) << (size - pos)
+
     def decode_msg(self):
         size = 64
         pos = 16    # skip the header
@@ -96,6 +100,9 @@ class INIT(MSG):
 
         pos += 4
         self.k2 = (int(self.payload) >> (size - pos)) & 0xf
+
+        pos += 10
+        self.spf = (int(self.payload) >> (size - pos)) & ((1 << 10) - 1)
 
     
             
@@ -166,7 +173,7 @@ class DCI_0_0(DCI):
         self.UE_id = 0                                  # The 16 bits UE id
         self.format_indicator = 0                       # always 0 for UL
         self.frequency_domain_resource_assignment = 0   # number of RB
-        self.time_domain_resource_assignment = 0        # 
+        self.time_domain_assignment = 0                 # 
         self.frequceny_hopping_flag = 0                 #
         self.mcs = 0                                    # 38.214 - 6.1.4
         self.ndi = 0                                    #

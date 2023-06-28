@@ -11,8 +11,9 @@ Created in 2023/03
 import argparse
 import li_sche.utils.pysctp.sctp as sctp
 import time
+import math
 
-from collections import deque
+from collections import deque, namedtuple
 from random import randrange
 from .agent import Agent
 from .envs.env import RAN_system, Schedule_Result
@@ -24,12 +25,13 @@ class Algorithms():
         # Agent
         self.agent = Agent(args = args, send_sock = send_sock, recv_sock = recv_sock)
         self.env = RAN_system(args = args, send_sock = send_sock, recv_sock = recv_sock)
+        self.pusch_result_transition = namedtuple('PUSCH_RESULT', ('frame', 'slot', 'nrof_UE', 'cumulated_rb'))
 
 
     # Schedule the PUSCH and Return the DCI0
     def schedule_pusch(self, frame, slot, ul_queue : deque):
         dci0 = list()
-        pusch = list()
+        pusch = self.pusch_result_transition(frame = frame, slot = slot, nrof_UE = 0, cumulated_rb = 0)
 
         # Only schedule in DL slot due to the DCI0
         current_slot = self.env.get_slot_info(frame = frame, slot = slot)
@@ -43,7 +45,7 @@ class Algorithms():
 
         while len(ul_queue) > 0 :
             ul_ue : UE = ul_queue.popleft()
-            ul_ue.freq_leng = ul_ue.total_data  / (self.env.tbs_per_RB / 8)
+            ul_ue.freq_leng = ul_ue.bsr
             ul_ue.time_length = 14
             ul_ue.start_symbol = 0
             
@@ -77,16 +79,20 @@ class Algorithms():
             cumulated_rb += ul_ue.freq_leng
             nrof_UE += 1
 
-        pusch = self.env.PUSCH_Transition(frame = frame, slot = slot+self.env.k2, nrof_UE = nrof_UE ,cumulatied_rb = cumulated_rb)
+        pusch = self.pusch_result_transition(frame = frame, slot = slot+self.env.k2, nrof_UE = nrof_UE ,cumulated_rb = cumulated_rb)
         return dci0, pusch
     
 
-    def schedule_pdsch(self):
-        return None, None
+    def schedule_downlink(self, frame, slot):
+        current_slot = self.env.get_slot_info(frame = frame, slot = slot)
+        # Only schedule in Special slot
+        if current_slot != 'S':
+            return None
         
-
-    def schedule_pucch(self):
-        return None, None
+        dci : DCI_1_0 = DCI_1_0()
+        dci.UE_id = 16
+        dci.fill_payload()
+        return [dci.payload]
 
 
     ############################### FCFS ############################## 
@@ -104,38 +110,31 @@ class Algorithms():
             '''
             This idea is from OAI
             1.) Schedule PUSCH and DCI0
-            2.) Schedule PDSCH and DCI1
-            3.) Schedule PUCCH for UCI
+            2.) Schedule DCI1
             '''
             frame = state_tuple.frame
             slot = state_tuple.slot
-            ul_req : list = state_tuple.ul_req
+            ul_req = deque(state_tuple.ul_req, maxlen = 65535)
             action = Schedule_Result()    
             
             # Update the queue
-            for i in range(len(ul_queue)):
-                ul_queue[i].rdb -= 1
-                ul_queue[i].queuing_delay += 1
+            for i in range(len(ul_queue)):                
+                for i in range(len(ul_queue)):
+                    ul_queue[i].rdb -= 1
+                    ul_queue[i].queuing_delay += 1
             
-            for ul_ue in ul_req:
-                ul_queue.append(ul_ue)
-                
+            for i in range(len(ul_req)):
+                ul_queue.append(ul_req.popleft())
+                                
             # Schedule the DCI0 and UL Data sequentially
             dci0, pusch_result = self.schedule_pusch(frame = frame, slot = slot, ul_queue = ul_queue) 
 
-            # Schedule the DCI1 and DL data Sequentially
-            # dci1, pdsch_result = self.schedule_pdsch()
+            # Schedule the DCI1 for informing the UCCH
+            dci1 = self.schedule_downlink(frame = frame, slot = slot)
+         
 
-            # Schedule the PUCCH
-            # pucch_result = self.schedule_pucch()
-
-            # Process DCI
-            # pdcch_result = []
-
-            action.DCCH = dci0
-            # action.DSCH = pdsch_result
-            # action.UCCH = pucch_result
-            action.USCH = pusch_result
+            action.DCCH = action.DCI_Transition(dci0 = dci0, dci1 = dci1)
+            action.USCH = action.USCH_Transition(frame = pusch_result.frame, slot = pusch_result.slot, nrof_UE = pusch_result.nrof_UE, cumulatied_rb = pusch_result.cumulated_rb)
             
             
             state_tuple, reward, done = self.env.step(action)

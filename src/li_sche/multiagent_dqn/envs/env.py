@@ -19,7 +19,7 @@ from collections import namedtuple, deque
 from .ue import UE
 from .thread import Socket_Thread
 from .msg import *
-
+import  li_sche.multiagent_dqn.envs.msg as MSG_HDR
 
 
 ## Constant
@@ -60,11 +60,23 @@ class RAN:
         self.tbs_per_RB     = 848 # bits For MCS = 27, Layer = 1, each RB
 
 class Schedule_Result:
+    '''
+    For now, only has two results
+    1.) DCI msgs --> dci0_0 and dci1_0
+    2.) USCH shceduling results
+    '''
     def __init__(self):
-        self.DCCH = list()      # Send the DCI0_0 msg to each UE (Does not send DCI#1_0)
-        self.DSCH = None        # Send DL data (Skip for now...)
-        self.UCCH = list()      # UL resources for receiving the UCI
-        self.USCH = list()      # UL resources for receiving the UL data from UEs
+        self.DCI_Transition = namedtuple('DCI_Tuple', ('dci0', 'dci1'))
+        self.USCH_Transition = namedtuple('Data_Tuple', ('frame', 'slot', 'nrof_UE', 'cumulatied_rb'))
+
+        self.DCCH = self.DCI_Transition(dci0=list(), dci1 = list())          
+        self.USCH = self.USCH_Transition(frame=0, slot=0, nrof_UE=0, cumulatied_rb=0)    
+
+    def get_DCCH(self):
+        return self.DCI_Transition(self.DCCH)
+
+    def get_USCH(self):
+        return self.USCH_Transition(self.USCH)  
 
 
 class RAN_system(RAN):
@@ -99,27 +111,32 @@ class RAN_system(RAN):
     5. The Federated Learning in UE side.
     6. Cooperative multi-agent in the both side (UE and gNB)
     '''
+
     def __init__(self, args : argparse.Namespace, send_sock : sctp.sctpsocket_tcp, recv_sock : sctp.sctpsocket_tcp):
         super(RAN_system, self).__init__(BW = args.bw,
                                         numerology = args.mu,
                                         nrofRB = args.rb)
         self.State_Transition = namedtuple('State_Tuple', ('frame', 'slot', 'ul_req'))
-        self.PUSCH_Transition = namedtuple('PUSCH_Tuple', ('frame', 'slot', 'nrof_UE', 'cumulatied_rb'))
         self.recv_sock = recv_sock
         self.send_sock = send_sock
         self.frame = 0
         self.slot = 0
         self.args = args
         self.done = False
-        self.ul_req = list()
+        self.ul_req = deque([], maxlen = 65535)
         self.USCH_ra_queue =  deque([], maxlen = 5) # ULSCH resource allocation; depends on the number of UL slot in a aperiod
+        self.UCCH_queue =  deque([], maxlen = 2) # ULCCH; depends on the number of Special slot in a aperiod
+        # self.receive_thread = Socket_Thread(name = "UL_Thread", socket = recv_sock, callback = self.uplink_channel)
+        # self.receive_thread.start()
 
     def init_RAN_system(self):
         # Inform UE entity
         init_msg = INIT()
         init_msg.header = HDR_INIT
         init_msg.k0 = self.k0
+        init_msg.k1 = self.k1
         init_msg.k2 = self.k2
+        init_msg.spf = self.spf
         init_msg.fill_payload()
         self.downlink_channel(init_msg.payload)
 
@@ -140,28 +157,54 @@ class RAN_system(RAN):
         return self.slot_pattern[cumulated_slot % self.pattern_p]
     
     def uplink_channel(self):
-        ul_end = False
-        msg_list = list()
-        while not ul_end:
+        recv_done = False
+        while not recv_done:
             fromaddr, flags, msg, notif = self.recv_sock.sctp_recv(65535)
-            print(msg)
-            if msg == None:
-                ul_end = True
-                break
-
+            recv_msg = MSG()
             msg = int.from_bytes(msg, "big")
-            msg_list.append(msg)
-        return msg_list
+            recv_msg.payload = msg
+            header = recv_msg.decode_header()
+            
+            match header:
+                case MSG_HDR.HDR_INIT:
+                    recv_done = False
+                
+                case MSG_HDR.HDR_END:
+                    recv_done = True
+
+                case _:
+                    current_slot_info = self.get_slot_info(self.frame, self.slot)
+                    print(current_slot_info)
+
+                    match current_slot_info:
+                        case 'S':
+                            uci : UCI = UCI()
+                            uci.header = header
+                            uci.payload = msg
+                            uci.decode_msg()
+
+                            ue : UE = UE()
+                            ue.id = uci.header
+                            ue.bsr = 3
+                            ue.rdb = 50
+                            self.ul_req.append(ue)
+                        case 'U':
+                            ul_data : UL_Data = UL_Data()
+                            ul_data.header = header
+                            ul_data.payload = msg
+                            ul_data.decode_payload()
+                
+       
         
     def downlink_channel(self, msg : int):
-        print(f"[gNB] Sned {bin(msg)}")
+        # print(f"[gNB] Sned {bin(msg)}")
         msg = msg.to_bytes(16, "big")
         self.send_sock.sctp_send(msg)
 
 
-    def contenion(self, action : list):
+    def contenion(self, nrof_UE, cumulated_rb, ul_data):
         ### The highest level parameterm
-        ul_uelist = action
+        ul_uelist = ul_data
 
         ####### !~ { The group_id is 0 ~ MAX_GROUP-1 } ~! ##########
         ## Arrange the grouping map which store the every UE which is allocated to the group
@@ -259,25 +302,14 @@ class RAN_system(RAN):
 
         return reward
 
-    def send_DCI(self):
+    def send_DCI(self, dci : list()):
         reward = 0
-        return reward
-
-    def recv_UCI(self):
-        uci_packets = list()
-        uci_packets = self.uplink_channel()
-        reward = 0
-        return reward
-        
-
-    def recv_Data(self):
-        ul_packets = list()
-        ul_packets = self.uplink_channel()
-        reward = 0
+        for dci_msg in dci:
+            self.downlink_channel(dci_msg)
+            reward += 1    
         return reward
         
     
-
     def step(self, action : Schedule_Result):
         # Slot indication to UE entity
         slot_ind = SYNC()
@@ -292,22 +324,26 @@ class RAN_system(RAN):
         reward = 0
         match current_slot_info:
             case 'D':
-                action.DCCH
+                dci0 = action.DCCH.dci0
                 self.USCH_ra_queue.append(action.USCH)
-                reward = self.send_DCI()
+                reward = self.send_DCI(dci0)
 
             case 'S':
-                reward = self.recv_UCI()
-                
+                dci1 = action.DCCH.dci1
+                self.UCCH_queue.append(action.USCH)
+                self.send_DCI(dci1)
+                self.uplink_channel()
+
             case 'U':
-                USCH_ra = self.PUSCH_Transition(self.USCH_ra_queue.popleft())
+                USCH_ra = action.USCH
                 if USCH_ra.frame != self.frame or USCH_ra.slot != self.slot:
                     reward = -1
                 else:
                     nrof_UE = USCH_ra.nrof_UE
+                    cumulated_rb = USCH_ra.cumulatied_rb
                     if nrof_UE > 0:
                         ul_data = self.uplink_channel()
-                        reward = self.contenion()
+                        reward = self.contenion(nrof_UE, cumulated_rb, ul_data)
                 
 
         # Update the slot
@@ -325,6 +361,7 @@ class RAN_system(RAN):
             end_msg.header = HDR_END
             end_msg.fill_payload()
             self.downlink_channel(end_msg.payload)
-            
-        next_state_tuple = self.State_Transition(frame = self.frame, slot = self.slot, ul_req = [])
+            next_state_tuple = self.State_Transition(frame = self.frame, slot = self.slot, ul_req = [])
+
+        next_state_tuple = self.State_Transition(frame = self.frame, slot = self.slot, ul_req = self.ul_req)
         return next_state_tuple, reward, self.done

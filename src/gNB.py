@@ -54,11 +54,12 @@ SERVER_HOST="172.17.0.3"
 MAX_BUFFER_SIZE = 65535
 
 
+
 from collections import deque
 def main(parser: argparse.Namespace):
 
     # Test Block # 
-    
+   
     ##############
     '''
     To emulate the Rx and Tx, I create two socket
