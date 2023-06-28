@@ -43,8 +43,6 @@ class MSG:
         pos += 16   # Fill Header
         self.payload |= (self.header & ((1 << 16) - 1)) << (size - pos)
 
-
-
     def decode_header(self):
         size = 64
         pos = 0
@@ -53,6 +51,7 @@ class MSG:
         pos += 16
         self.header = (self.payload >> (size - pos)) & ((1 << 16) - 1)
         return self.header
+    
     
 # RRC setup msg, only get the needed msg
 class INIT(MSG):
@@ -172,18 +171,21 @@ class DCI_0_0(DCI):
         super(DCI_0_0,self).__init__()
         self.UE_id = 0                                  # The 16 bits UE id
         self.format_indicator = 0                       # always 0 for UL
-        self.frequency_domain_resource_assignment = 0   # number of RB
-        self.time_domain_assignment = 0                 # 
-        self.frequceny_hopping_flag = 0                 #
-        self.mcs = 0                                    # 38.214 - 6.1.4
-        self.ndi = 0                                    #
-        self.rv = 0                                     # 0, 1, 2, 3
-        self.harq_process_number = 0                    #
-        self.TPC_command_for_schedule_pusch = 0         # 38.213 - table 7.1.1-1
-        self.SUL_indicator = 0                          # 0 for SUL not configured; 1 for otherwise
-        #  For this research, the following are added   #
-        self.contention = 0                             # indicate the contention flag
-        self.contention_size = 0                        # the number of contention RB
+        # self.frequency_domain_resource_assignment = 0   # number of RB
+        # self.time_domain_assignment = 0                 # 
+        # self.frequceny_hopping_flag = 0                 #
+        # self.mcs = 0                                    # 38.214 - 6.1.4
+        # self.ndi = 0                                    #
+        # self.rv = 0                                     # 0, 1, 2, 3
+        # self.harq_process_number = 0                    #
+        # self.TPC_command_for_schedule_pusch = 0         # 38.213 - table 7.1.1-1
+        # self.SUL_indicator = 0                          # 0 for SUL not configured; 1 for otherwise
+
+        # For research
+        self.start_rb = 0                               # The start RB index 0 ~ 274    [8 bits]
+        self.freq_len = 0                            # The RB length                 [4 bits]
+        self.contention = 0                             # indicate the contention flag  [1 bit]
+        self.contention_size = 0                        # the number of contention RB   [8 bits]
 
 
     def fill_payload(self):
@@ -197,38 +199,46 @@ class DCI_0_0(DCI):
         pos += 1
         self.payload |= (int(0)) << (dci_size - pos)
 
-        pos += 4
-        self.payload |= (int(self.frequency_domain_assignment) & 0xf) << (dci_size - pos)
+        pos += 8
+        self.payload |= (int(self.start_rb) & 0xff) << (dci_size - pos)
 
         pos += 4
-        self.payload |= (int(self.time_domain_assignment) & 0xf) << (dci_size - pos)
-
-        pos += 1
-        self.payload |= (int(self.frequceny_hopping_flag) & 1) << (dci_size - pos)
-
-        pos += 5
-        self.payload |= (int(self.mcs) & 0x1f) << (dci_size - pos)
-
-        pos += 1
-        self.payload |= (int(self.ndi) & 1) << (dci_size - pos)
-
-        pos +=2
-        self.payload |= (int(self.rv) & 0x3) << (dci_size - pos)
-
-        pos += 4
-        self.payload |= (int(self.harq_process_number) & 0xf) << (dci_size - pos)
-
-        pos += 2
-        self.payload |= (int(self.TPC_command_for_schedule_pusch) & 0x3) << (dci_size - pos)
-
-        pos += 1
-        self.payload |= (int(self.SUL_indicator) & 1) << (dci_size - pos)
+        self.payload |= (int(self.freq_len) & 0xf) << (dci_size - pos)
 
         pos += 1
         self.payload |= (int(self.contention) & 1) << (dci_size - pos)
 
-        pos += 16
-        self.payload |= (int(self.contention_size) & ((1 << 16) - 1)) << (dci_size - pos)
+        pos += 8
+        self.payload |= (int(self.contention_size) & 0xff) << (dci_size - pos)
+
+        # pos += 4
+        # self.payload |= (int(self.frequency_domain_assignment) & 0xf) << (dci_size - pos)
+
+        # pos += 4
+        # self.payload |= (int(self.time_domain_assignment) & 0xf) << (dci_size - pos)
+
+        # pos += 1
+        # self.payload |= (int(self.frequceny_hopping_flag) & 1) << (dci_size - pos)
+
+        # pos += 5
+        # self.payload |= (int(self.mcs) & 0x1f) << (dci_size - pos)
+
+        # pos += 1
+        # self.payload |= (int(self.ndi) & 1) << (dci_size - pos)
+
+        # pos +=2
+        # self.payload |= (int(self.rv) & 0x3) << (dci_size - pos)
+
+        # pos += 4
+        # self.payload |= (int(self.harq_process_number) & 0xf) << (dci_size - pos)
+
+        # pos += 2
+        # self.payload |= (int(self.TPC_command_for_schedule_pusch) & 0x3) << (dci_size - pos)
+
+        # pos += 1
+        # self.payload |= (int(self.SUL_indicator) & 1) << (dci_size - pos)
+
+       
 
     def decode_msg(self):
         dci_size = 64
@@ -239,39 +249,45 @@ class DCI_0_0(DCI):
         pos += 1
         self.format_indicator               = (self.payload >> (dci_size - pos)) & 1
 
-        pos += 4
-        self.frequency_domain_assignment    = (self.payload >> (dci_size - pos)) & 0xf
+        pos += 8
+        self.start_rb                       = (self.payload >> (dci_size - pos)) & 0xff
 
         pos += 4
-        self.time_domain_assignment         = (self.payload >> (dci_size - pos)) & 0xf
-
-        pos += 1
-        self.frequceny_hopping_flag         = (self.payload >> (dci_size - pos)) & 1
-
-        pos += 5
-        self.mcs                            = (self.payload >> (dci_size - pos)) & 0x1f
-
-        pos += 1
-        self.ndi                            = (self.payload >> (dci_size - pos)) & 1
-
-        pos +=2
-        self.rv                             = (self.payload >> (dci_size - pos)) & 0x3
-
-        pos += 4
-        self.harq_process_number            = (self.payload >> (dci_size - pos)) & 0xf
-
-        pos += 2
-        self.TPC_command_for_schedule_pusch = (self.payload >> (dci_size - pos)) & 0x3
-
-        pos += 1
-        self.SUL_indicator                  = (self.payload >> (dci_size - pos)) & 1
+        self.freq_len                    = (self.payload >> (dci_size - pos)) & 0xf
 
         pos += 1
         self.contention                     = (self.payload >> (dci_size - pos)) & 1
 
-        pos += 16
-        self.contention_size                = (self.payload >> (dci_size - pos)) & ((1 << 16) - 1)
-  
+        pos += 8
+        self.contention_size                = (self.payload >> (dci_size - pos)) & 0xff
+
+        # pos += 4
+        # self.frequency_domain_assignment    = (self.payload >> (dci_size - pos)) & 0xf
+
+        # pos += 4
+        # self.time_domain_assignment         = (self.payload >> (dci_size - pos)) & 0xf
+
+        # pos += 1
+        # self.frequceny_hopping_flag         = (self.payload >> (dci_size - pos)) & 1
+
+        # pos += 5
+        # self.mcs                            = (self.payload >> (dci_size - pos)) & 0x1f
+
+        # pos += 1
+        # self.ndi                            = (self.payload >> (dci_size - pos)) & 1
+
+        # pos +=2
+        # self.rv                             = (self.payload >> (dci_size - pos)) & 0x3
+
+        # pos += 4
+        # self.harq_process_number            = (self.payload >> (dci_size - pos)) & 0xf
+
+        # pos += 2
+        # self.TPC_command_for_schedule_pusch = (self.payload >> (dci_size - pos)) & 0x3
+
+        # pos += 1
+        # self.SUL_indicator                  = (self.payload >> (dci_size - pos)) & 1
+
 
 class DCI_1_0(DCI):
     '''
@@ -284,17 +300,17 @@ class DCI_1_0(DCI):
         super(DCI_1_0,self).__init__()
         self.UE_id = 0                                      # The UE ID for 16 bits
         self.format_indicator = 0                           # always 1 for DL
-        self.frequency_domain_assignment = 0                # 
-        self.time_domain_assignment = 0                     # 
-        self.vrb_to_prb_mapping = 0                         # 0 : non-interleaved; 1 : interleaved
-        self.mcs = 0                                        # Modulation and Coding Scheme 38.214 - 5.1.3.1-1/2
-        self.ndi = 0                                        # 
-        self.rv = 0                                         # 
-        self.harq_process_number = 0                        #
-        self.downlink_assignment_index = 0                  #
-        self.tpc = 0                                        #
-        self.pucch_resource = 0                             #
-        self.pdsch_to_harq_feedback_timing_indicator = 0    # map to k1 = {1,2,3,4,5,6,7,8}
+        # self.frequency_domain_assignment = 0                # 
+        # self.time_domain_assignment = 0                     # 
+        # self.vrb_to_prb_mapping = 0                         # 0 : non-interleaved; 1 : interleaved
+        # self.mcs = 0                                        # Modulation and Coding Scheme 38.214 - 5.1.3.1-1/2
+        # self.ndi = 0                                        # 
+        # self.rv = 0                                         # 
+        # self.harq_process_number = 0                        #
+        # self.downlink_assignment_index = 0                  #
+        # self.tpc = 0                                        #
+        # self.pucch_resource = 0                             #
+        # self.pdsch_to_harq_feedback_timing_indicator = 0    # map to k1 = {1,2,3,4,5,6,7,8}
 
     def fill_payload(self):
         dci_size = 64
@@ -307,38 +323,38 @@ class DCI_1_0(DCI):
         pos += 1
         self.payload |= (int(1)) << (dci_size - pos)
 
-        pos += 16
-        self.payload |= (int(self.frequency_domain_assignment) & ((1 << 16) - 1)) << (dci_size - pos)
+        # pos += 16
+        # self.payload |= (int(self.frequency_domain_assignment) & ((1 << 16) - 1)) << (dci_size - pos)
 
-        pos += 4
-        self.payload |= (int(self.time_domain_assignment) & 0xf) << (dci_size - pos)
+        # pos += 4
+        # self.payload |= (int(self.time_domain_assignment) & 0xf) << (dci_size - pos)
 
-        pos += 1
-        self.payload |= (int(self.vrb_to_prb_mapping) & 1) << (dci_size - pos)
+        # pos += 1
+        # self.payload |= (int(self.vrb_to_prb_mapping) & 1) << (dci_size - pos)
 
-        pos += 5
-        self.payload |= (int(self.mcs) & 0x1f) << (dci_size - pos)
+        # pos += 5
+        # self.payload |= (int(self.mcs) & 0x1f) << (dci_size - pos)
 
-        pos += 1
-        self.payload |= (int(self.ndi) & 1) << (dci_size - pos)
+        # pos += 1
+        # self.payload |= (int(self.ndi) & 1) << (dci_size - pos)
 
-        pos += 2
-        self.payload |= (int(self.rv) & 0x3) << (dci_size - pos)
+        # pos += 2
+        # self.payload |= (int(self.rv) & 0x3) << (dci_size - pos)
 
-        pos += 4
-        self.payload |= (int(self.harq_process_number) & 0xf) << (dci_size - pos)
+        # pos += 4
+        # self.payload |= (int(self.harq_process_number) & 0xf) << (dci_size - pos)
 
-        pos += 2
-        self.payload |= (int(self.downlink_assignment_index) & 0x3) << (dci_size - pos)
+        # pos += 2
+        # self.payload |= (int(self.downlink_assignment_index) & 0x3) << (dci_size - pos)
 
-        pos += 2
-        self.payload |= (int(self.tpc) & 0x3) << (dci_size - pos)
+        # pos += 2
+        # self.payload |= (int(self.tpc) & 0x3) << (dci_size - pos)
 
-        pos += 3
-        self.payload |= (int(self.pucch_resource) & 0x7) << (dci_size - pos)
+        # pos += 3
+        # self.payload |= (int(self.pucch_resource) & 0x7) << (dci_size - pos)
 
-        pos += 3
-        self.payload |= (int(self.pdsch_to_harq_feedback_timing_indicator) & 0x7) << (dci_size - pos)
+        # pos += 3
+        # self.payload |= (int(self.pdsch_to_harq_feedback_timing_indicator) & 0x7) << (dci_size - pos)
 
     def decode_msg(self):
         dci_size = 64
@@ -349,38 +365,38 @@ class DCI_1_0(DCI):
         pos += 1
         self.format_indicator                           = (self.payload >> (dci_size - pos)) & 1
 
-        pos += 16
-        self.frequency_domain_assignment                = (self.payload >> (dci_size - pos)) & ((1 << 16) - 1)
+        # pos += 16
+        # self.frequency_domain_assignment                = (self.payload >> (dci_size - pos)) & ((1 << 16) - 1)
 
-        pos += 4
-        self.time_domain_assignment                     = (self.payload >> (dci_size - pos)) & 0xf
+        # pos += 4
+        # self.time_domain_assignment                     = (self.payload >> (dci_size - pos)) & 0xf
 
-        pos += 1
-        self.vrb_to_prb_mapping                         = (self.payload >> (dci_size - pos)) & 1
+        # pos += 1
+        # self.vrb_to_prb_mapping                         = (self.payload >> (dci_size - pos)) & 1
 
-        pos += 5
-        self.mcs                                        = (self.payload >> (dci_size - pos)) & 0x1f
+        # pos += 5
+        # self.mcs                                        = (self.payload >> (dci_size - pos)) & 0x1f
 
-        pos += 1
-        self.ndi                                        = (self.payload >> (dci_size - pos)) & 1
+        # pos += 1
+        # self.ndi                                        = (self.payload >> (dci_size - pos)) & 1
 
-        pos += 2
-        self.rv                                         = (self.payload >> (dci_size - pos)) & 0x3
+        # pos += 2
+        # self.rv                                         = (self.payload >> (dci_size - pos)) & 0x3
 
-        pos += 4
-        self.harq_process_number                        = (self.payload >> (dci_size - pos)) & 0xf
+        # pos += 4
+        # self.harq_process_number                        = (self.payload >> (dci_size - pos)) & 0xf
 
-        pos += 2
-        self.downlink_assignment_index                  = (self.payload >> (dci_size - pos)) & 0x3
+        # pos += 2
+        # self.downlink_assignment_index                  = (self.payload >> (dci_size - pos)) & 0x3
 
-        pos += 2
-        self.tpc                                        = (self.payload >> (dci_size - pos)) & 0x3
+        # pos += 2
+        # self.tpc                                        = (self.payload >> (dci_size - pos)) & 0x3
 
-        pos += 3
-        self.pucch_resource                             = (self.payload >> (dci_size - pos)) & 0x7
+        # pos += 3
+        # self.pucch_resource                             = (self.payload >> (dci_size - pos)) & 0x7
 
-        pos += 3
-        self.pdsch_to_harq_feedback_timing_indicator    = (self.payload >> (dci_size - pos)) & 0x7      
+        # pos += 3
+        # self.pdsch_to_harq_feedback_timing_indicator    = (self.payload >> (dci_size - pos)) & 0x7      
 
 # This msg is carried on PUCCH Physical Uplink Control Channel
 # [ 3GPP TS 38.212 - 6.3.1.1 / 6.3.2.1]
@@ -393,11 +409,11 @@ class UCI(MSG):
     '''
     def __init__(self):
         super(UCI,self).__init__()
-        self.ACK_NACK = 0
-        self.proc_id = 0
-        self.SR = 0
-        self.UE_id = 0
-        self.CSI = 0
+        self.UE_id = 0      #   [16 bits]
+        self.ACK_NACK = 0   #   [4 bits]
+        self.proc_id = 0    #   [1 bit]
+        self.SR = 0         #   [1 bit]
+        self.CSI = 0        #   [4 bits]
 
     def fill_payload(self):
         uci_size = 64
@@ -439,17 +455,14 @@ class UCI(MSG):
 
 
 class UL_Data(MSG):
-    '''
-            16            8        8        10               22
-    |----------------|--------|--------|----------|----------------------| 
-          header      Data Size   BSR       RDB            reserved
-    '''
     def __init__(self):
         super(UL_Data, self).__init__()
-        self.UE_id : int = 0
-        self.payload_size : int = 0 # Along with the BSR index
-        self.bsr : int = 0 # short BSR : 5 bits, long BSR : 8 bits
-        self.rdb : int = 0 # Remaining Delay Budget
+        self.UE_id : int = 0            #                                   [16 bits]
+        self.payload_size : int = 0     # Along with the BSR index          [8 bits]
+        self.bsr : int = 0              # in RB                             [8 bits]
+        self.rdb : int = 0              # Remaining Delay Budget in slot    [10 bits]
+        self.start_rb : int = 0         # The start RB                      [8 bits]
+        self.freq_len : int = 0      # The freq length                   [4 bits]
 
     def fill_payload(self):
         ul_data_size = 64
@@ -466,7 +479,13 @@ class UL_Data(MSG):
         self.payload |= (int(self.bsr) & 0xff) << (ul_data_size - pos)
 
         pos += 10
-        self.payload |= (int(self.bsr) & ((1 << 10) - 1)) << (ul_data_size - pos)
+        self.payload |= (int(self.rdb) & ((1 << 10) - 1)) << (ul_data_size - pos)
+
+        pos += 8
+        self.payload |= (int(self.start_rb) & 0xff) << (ul_data_size - pos)
+
+        pos += 4
+        self.payload |= (int(self.freq_len) & 0xf) << (ul_data_size - pos)
 
     def decode_payload(self):
         ul_data_size = 64
@@ -482,3 +501,9 @@ class UL_Data(MSG):
 
         pos += 10
         self.rdb            = (self.payload >> (ul_data_size - pos)) & ((1 << 10) - 1)
+
+        pos += 8
+        self.start_rb       = (self.payload >> (ul_data_size - pos)) & 0xff
+
+        pos += 8
+        self.freq_len    = (self.payload >> (ul_data_size - pos)) & 0xf

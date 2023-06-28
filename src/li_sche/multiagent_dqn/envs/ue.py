@@ -30,10 +30,10 @@ class UE:
         # ----[==================================]---- #
         #             [ Original DCI msg ]             #
         # self.mcs = 0                    # MCS
-        self.start_symbol = 0           # Start symbol
-        self.time_length = 0            # Time duration
+        # self.start_symbol = 0           # Start symbol
+        # self.time_length = 0            # Time duration
         self.start_rb = 0               # Start RB [RB index]
-        self.freq_leng = 0              # RB size
+        self.freq_len = 0               # RB size
         self.transmission_time = 0      # The slot
         #             [ Proposed DCI msg ]             #
         self.contention = False         # Contention flag [0 : schedule; 1 contention]

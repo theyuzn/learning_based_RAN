@@ -149,15 +149,14 @@ def downlink_channel(msg : bytes):
 
                     for i in range(len(UL_UE_List)):
                         if dci0_0.UE_id == UL_UE_List[i].id:
-                            UL_UE_List[i].freq_leng = dci0_0.frequency_domain_assignment
-                            UL_UE_List[i].time_length = dci0_0.time_domain_assignment
+                            UL_UE_List[i].start_rb = dci0_0.start_rb
+                            UL_UE_List[i].freq_len = dci0_0.freq_len
                             UL_UE_List[i].transmission_time = (system_frame * system_spf + system_slot) + system_k2
 
                             if dci0_0.contention == 1:
                                 UL_UE_List[i].contention = True
                                 UL_UE_List[i].contention_size = dci0_0.contention_size
                     
-
                 case 1:
                     LOG(f"Receive DCI format : {dci.DCI_format} for UE : {dci.header}")
                     dci1_0 : DCI_1_0 = DCI_1_0()
