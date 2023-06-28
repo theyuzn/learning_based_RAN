@@ -40,44 +40,64 @@ class Algorithms():
         
         contention_size = 0
         schedule_size = 0
-        cumulated_rb = 0
-        nrof_UE = 0
+        scheduled_UE = deque([], maxlen=65535)
+        contention_UE = deque([], maxlen=65535)
 
+        # To cound the size of each scheme
         while len(ul_queue) > 0 :
             ul_ue : UE = ul_queue.popleft()
-            ul_ue.freq_leng = ul_ue.bsr
-            ul_ue.time_length = 14
-            ul_ue.start_symbol = 0
-            
+            ul_ue.freq_len = ul_ue.bsr     
 
-            if ul_ue.rdb <= 2 * self.env.pattern_p:
+            if ul_ue.rdb <= 5 * self.env.pattern_p:
                 # Schedule
                 ul_ue.contention = False
-                schedule_size += ul_ue.freq_leng
+                schedule_size += ul_ue.freq_len
+                scheduled_UE.append(ul_ue)
+                
             else:
                 ul_ue.contention = True
-                contention_size += ul_ue.freq_leng
+                contention_size += ul_ue.freq_len
+                contention_UE.append(ul_ue)
             
             if schedule_size + contention_size >= self.env.nrofRB:
                 ul_queue.appendleft(ul_ue)
                 break
+        
 
-            # Fill DCI0
-            dci = DCI_0_0()
-            dci.header = ul_ue.id
-            dci.UE_id = ul_ue.id
-            dci.frequency_domain_assignment = ul_ue.freq_leng
-            dci.time_domain_resource_assignment = ul_ue.time_length
-            dci.contention = ul_ue.contention
-            if ul_ue.contention:
-                dci.contention_size = contention_size
+        # Fill PUSCH result
+        cumulated_rb = schedule_size + contention_size
+        nrof_UE  = len(scheduled_UE) + len(contention_UE)
+
+        # To fill DCI for scheduled UE
+        start_rb = 0
+        while len(scheduled_UE) > 0:
+            ue : UE = scheduled_UE.pop()
             
+            dci = DCI_0_0()
+            dci.header = ue.id
+            dci.UE_id = ue.id
+            dci.start_rb = start_rb
+            dci.freq_len = ue.freq_len
+            
+            start_rb += ue.freq_len
             dci.fill_payload()
             dci0.append(dci.payload)
+        
+        # To fill DCI for shared UE
+        while len(contention_UE) > 0:
+            ue : UE = contention_UE.pop()
+            
+            dci = DCI_0_0()
+            dci.header = ue.id
+            print(f"{dci.header} in C")
+            dci.UE_id = ue.id
+            dci.start_rb = start_rb
+            dci.freq_len = ue.freq_len
+            dci.contention = True
+            dci.contention_size = contention_size
 
-            # Fill PUSCH result
-            cumulated_rb += ul_ue.freq_leng
-            nrof_UE += 1
+            dci.fill_payload()
+            dci0.append(dci.payload)
 
         pusch = self.pusch_result_transition(frame = frame, slot = slot+self.env.k2, nrof_UE = nrof_UE ,cumulated_rb = cumulated_rb)
         return dci0, pusch

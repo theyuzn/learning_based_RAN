@@ -12,6 +12,8 @@ import argparse
 import math
 import random
 import numpy as np
+import json
+import os
 
 import li_sche.utils.pysctp.sctp as sctp
 
@@ -123,30 +125,47 @@ class RAN_system(RAN):
         self.slot = 0
         self.args = args
         self.done = False
-        self.ul_req = deque([], maxlen = 65535)
+
+        self.UE_List = deque([], maxlen = 65535)
+        self.UL_Flow_UE = deque([], maxlen = 65535)
+
         self.USCH_ra_queue =  deque([], maxlen = 5) # ULSCH resource allocation; depends on the number of UL slot in a aperiod
-        self.UCCH_queue =  deque([], maxlen = 2) # ULCCH; depends on the number of Special slot in a aperiod
-        # self.receive_thread = Socket_Thread(name = "UL_Thread", socket = recv_sock, callback = self.uplink_channel)
-        # self.receive_thread.start()
+        self.i = 0
+
+    def decode_json(self, dct):
+        self.i += 1
+        return  UE(
+                    id              = self.i, 
+                    bsr             = math.ceil(dct['sizebyte']/848),
+                    rdb             = dct['delayms']*math.pow(2, 1),
+                    # service         = dct[WINDOW],
+                    # nr5QI           = dct[NR5QI],
+                    # errorrate       = dct[ER],
+                    # type            = dct[TYPE]
+                    )
 
     def init_RAN_system(self):
         # Inform UE entity
-        init_msg = INIT()
-        init_msg.header = HDR_INIT
-        init_msg.k0 = self.k0
-        init_msg.k1 = self.k1
-        init_msg.k2 = self.k2
-        init_msg.spf = self.spf
-        init_msg.fill_payload()
-        self.downlink_channel(init_msg.payload)
+        # init_msg = INIT()
+        # init_msg.header = HDR_INIT
+        # init_msg.k0 = self.k0
+        # init_msg.k1 = self.k1
+        # init_msg.k2 = self.k2
+        # init_msg.spf = self.spf
+        # init_msg.fill_payload()
+        # self.downlink_channel(init_msg.payload)
 
         # Initial the system
         self.frame = 0
         self.slot = 0
         self.done = False
-        self.ul_req = list()
         reward = 0
-        state_tuple = self.State_Transition(frame = self.frame, slot = self.slot, ul_req = self.ul_req)
+
+         # Load the UEs
+        path = f"{os.path.dirname(__file__)}/../../../data/uedata.json"
+        with open(path, 'r') as ue_file:
+            self.UE_List = deque(json.load(ue_file,object_hook=self.decode_json), maxlen = 65535)
+        state_tuple = self.State_Transition(frame = self.frame, slot = self.slot, ul_req = [])
         return state_tuple, reward, self.done
 
    
@@ -157,42 +176,42 @@ class RAN_system(RAN):
         return self.slot_pattern[cumulated_slot % self.pattern_p]
     
     def uplink_channel(self):
-        recv_done = False
-        while not recv_done:
-            fromaddr, flags, msg, notif = self.recv_sock.sctp_recv(65535)
-            recv_msg = MSG()
-            msg = int.from_bytes(msg, "big")
-            recv_msg.payload = msg
-            header = recv_msg.decode_header()
-            
-            match header:
-                case MSG_HDR.HDR_INIT:
-                    recv_done = False
+        pass
+        # recv_done = False
+        # while not recv_done:
+        #     fromaddr, flags, msg, notif = self.recv_sock.sctp_recv(65535)
+        #     recv_msg = MSG()
+        #     msg = int.from_bytes(msg, "big")
+        #     recv_msg.payload = msg
+        #     header = recv_msg.decode_header()
+        #     print(header)
+        #     match header:
+        #         case MSG_HDR.HDR_INIT:
+        #             recv_done = False
                 
-                case MSG_HDR.HDR_END:
-                    recv_done = True
+        #         case MSG_HDR.HDR_END:
+        #             recv_done = True
 
-                case _:
-                    current_slot_info = self.get_slot_info(self.frame, self.slot)
-                    print(current_slot_info)
+        #         case _:
+        #             current_slot_info = self.get_slot_info(self.frame, self.slot)
+        #             match current_slot_info:
+        #                 case 'S':
+        #                     print("S")
+        #                     uci : UCI = UCI()
+        #                     uci.header = header
+        #                     uci.payload = msg
+        #                     uci.decode_msg()
 
-                    match current_slot_info:
-                        case 'S':
-                            uci : UCI = UCI()
-                            uci.header = header
-                            uci.payload = msg
-                            uci.decode_msg()
-
-                            ue : UE = UE()
-                            ue.id = uci.header
-                            ue.bsr = 3
-                            ue.rdb = 50
-                            self.ul_req.append(ue)
-                        case 'U':
-                            ul_data : UL_Data = UL_Data()
-                            ul_data.header = header
-                            ul_data.payload = msg
-                            ul_data.decode_payload()
+        #                     ue : UE = UE()
+        #                     ue.id = uci.header
+        #                     ue.bsr = 3
+        #                     ue.rdb = 50
+        #                 case 'U':
+        #                     print("U")
+        #                     ul_data : UL_Data = UL_Data()
+        #                     ul_data.header = header
+        #                     ul_data.payload = msg
+        #                     ul_data.decode_payload()
                 
        
         
@@ -303,14 +322,18 @@ class RAN_system(RAN):
         return reward
 
     def send_DCI(self, dci : list()):
-        reward = 0
-        for dci_msg in dci:
-            self.downlink_channel(dci_msg)
-            reward += 1    
-        return reward
+        pass
+        # reward = 0
+        # for dci_msg in dci:
+        #     self.downlink_channel(dci_msg)
+        #     reward += 1    
+        # return reward
         
     
     def step(self, action : Schedule_Result):
+        # Initial
+        ul_req = deque([], maxlen = 65535)
+
         # Slot indication to UE entity
         slot_ind = SYNC()
         slot_ind.frame = self.frame
@@ -324,26 +347,31 @@ class RAN_system(RAN):
         reward = 0
         match current_slot_info:
             case 'D':
-                dci0 = action.DCCH.dci0
+                # dci0 = action.DCCH.dci0
                 self.USCH_ra_queue.append(action.USCH)
-                reward = self.send_DCI(dci0)
+                # print(action.USCH.nrof_UE)
+                # reward = self.send_DCI(dci0)
 
             case 'S':
-                dci1 = action.DCCH.dci1
-                self.UCCH_queue.append(action.USCH)
-                self.send_DCI(dci1)
-                self.uplink_channel()
+                for i in range(16):
+                    if len(self.UE_List) > 0:
+                        ul_req.append(self.UE_List.popleft())
+                # dci1 = action.DCCH.dci1
+                # self.send_DCI(dci1)
+                # self.uplink_channel()
+                pass
 
             case 'U':
-                USCH_ra = action.USCH
+                USCH_ra = self.USCH_ra_queue.popleft()
                 if USCH_ra.frame != self.frame or USCH_ra.slot != self.slot:
                     reward = -1
                 else:
                     nrof_UE = USCH_ra.nrof_UE
                     cumulated_rb = USCH_ra.cumulatied_rb
                     if nrof_UE > 0:
-                        ul_data = self.uplink_channel()
-                        reward = self.contenion(nrof_UE, cumulated_rb, ul_data)
+                        pass
+                        # self.uplink_channel()
+                        # reward = self.contenion(nrof_UE, cumulated_rb, ul_data)
                 
 
         # Update the slot
@@ -363,5 +391,5 @@ class RAN_system(RAN):
             self.downlink_channel(end_msg.payload)
             next_state_tuple = self.State_Transition(frame = self.frame, slot = self.slot, ul_req = [])
 
-        next_state_tuple = self.State_Transition(frame = self.frame, slot = self.slot, ul_req = self.ul_req)
+        next_state_tuple = self.State_Transition(frame = self.frame, slot = self.slot, ul_req = ul_req)
         return next_state_tuple, reward, self.done

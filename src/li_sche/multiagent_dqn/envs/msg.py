@@ -183,7 +183,7 @@ class DCI_0_0(DCI):
 
         # For research
         self.start_rb = 0                               # The start RB index 0 ~ 274    [8 bits]
-        self.freq_len = 0                            # The RB length                 [4 bits]
+        self.freq_len = 0                               # The freq length               [4 bits]
         self.contention = 0                             # indicate the contention flag  [1 bit]
         self.contention_size = 0                        # the number of contention RB   [8 bits]
 

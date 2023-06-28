@@ -17,10 +17,12 @@ import socket
 import math
 import numpy as np
 import time
+import random
 from li_sche.multiagent_dqn.envs.thread import Socket_Thread
 
 from li_sche.multiagent_dqn.envs.ue import UE
 from li_sche.multiagent_dqn.envs.msg import *
+from collections import deque
 import  li_sche.multiagent_dqn.envs.msg as MSG_HDR
 
 
@@ -50,9 +52,9 @@ system_spf = 0
 done = False
 send_UCI = False
 send_Data = False
-UE_List = list()
-UL_UE_List = list()
-Allocated_UE = list()
+UE_List = deque([], maxlen = 65535)
+UL_UE_List = deque([], maxlen = 65535)
+DCI0_List = deque([], maxlen = 65535)
 i = 0
 ##################################################################
 def LOG(log):
@@ -80,7 +82,7 @@ def downlink_channel(msg : bytes):
     header = recv_msg.decode_header()
 
     global system_frame, system_slot, system_k0, system_k1, system_k2, system_spf
-    global UE_List, UL_UE_List, Allocated_UE, send_UCI, send_Data, done
+    global UE_List, UL_UE_List, DCI0_List, send_UCI, send_Data, done
 
     match header:
         case MSG_HDR.HDR_INIT:
@@ -93,10 +95,9 @@ def downlink_channel(msg : bytes):
             done = False
 
             # Load the UEs
-            UE_List = list()
             path = f"{os.path.dirname(__file__)}/data/uedata.json"
             with open(path, 'r') as ue_file:
-                UE_List = json.load(ue_file,object_hook=decode_json) 
+                UE_List = deque(json.load(ue_file,object_hook=decode_json), maxlen = 65535)
 
             # Unpack the Init msg
             init_msg = INIT()
@@ -123,12 +124,17 @@ def downlink_channel(msg : bytes):
             sync_msg.decode_msg()
             system_frame = sync_msg.frame
             system_slot = sync_msg.slot
-            LOG(f"Slot indication ==> Frame : {system_frame}, Slot : {system_slot}")
 
-            # UL slot
+
+            # UL slot send UL data blocking
             cumulated_slot = system_frame * system_spf + system_slot
+            LOG(f"{SLOT_PATTERN1[cumulated_slot % PATTERN_P1]} Frame : {system_frame}, Slot : {system_slot}")
+
             if SLOT_PATTERN1[cumulated_slot % PATTERN_P1] == 'U':
                 send_Data = True
+
+            while send_Data:
+                continue
             
 
         # For each DCI0 or DCI1
@@ -140,35 +146,27 @@ def downlink_channel(msg : bytes):
 
             match dci.DCI_format:
                 case 0:
-                    LOG(f"Receive DCI format : {dci.DCI_format} for UE : {dci.header}")
                     dci0_0 : DCI_0_0 = DCI_0_0()
                     dci0_0.header = dci.header
                     dci0_0.payload = dci.payload
                     dci0_0.DCI_format = dci.DCI_format
                     dci0_0.decode_msg()
-
-                    for i in range(len(UL_UE_List)):
-                        if dci0_0.UE_id == UL_UE_List[i].id:
-                            UL_UE_List[i].start_rb = dci0_0.start_rb
-                            UL_UE_List[i].freq_len = dci0_0.freq_len
-                            UL_UE_List[i].transmission_time = (system_frame * system_spf + system_slot) + system_k2
-
-                            if dci0_0.contention == 1:
-                                UL_UE_List[i].contention = True
-                                UL_UE_List[i].contention_size = dci0_0.contention_size
+                    DCI0_List.append(dci0_0)
+                    LOG(f"Receive DCI format : {dci.DCI_format} for UE : {dci.header}")
                     
                 case 1:
-                    LOG(f"Receive DCI format : {dci.DCI_format} for UE : {dci.header}")
+                    # LOG(f"Receive DCI format : {dci.DCI_format} for UE : {dci.header}")
                     dci1_0 : DCI_1_0 = DCI_1_0()
                     dci1_0.header = dci.header
                     dci1_0.payload = dci.payload
                     send_UCI = True
+                    # Send UCI blocking
                     while send_UCI:
                         continue
                     
             
 
-def uplink_channel(sock : sctp.sctpsocket_tcp, msg : np.uint64):
+def uplink_channel(sock : sctp.sctpsocket_tcp, msg : int):
     msg = int(msg).to_bytes(16, "big")
     sock.sctp_send(msg)
 
@@ -198,7 +196,7 @@ def main():
 
     ## Initial ##
     global system_frame, system_slot, system_k0, system_k1, system_k2, system_spf
-    global UE_List, UL_UE_List, Allocated_UE, send_UCI, send_Data, done
+    global UE_List, UL_UE_List, DCI0_List, send_UCI, send_Data, done
 
     while not done:
         # send UCI
@@ -206,49 +204,79 @@ def main():
             init_msg = INIT()
             init_msg.header = HDR_INIT
             init_msg.fill_payload()
-            uplink_channel(sock = send_sock, msg = init_msg.payload)
-
-            uci : UCI = UCI()
+            # uplink_channel(sock = send_sock, msg = init_msg.payload)
+            
             for i in range(16):
                 i += 1
                 if len(UE_List) > 0:
+                    uci : UCI = UCI()
                     ul_ue : UE
-                    ul_ue = UE_List.pop()
+                    ul_ue = UE_List.popleft()
                     UL_UE_List.append(ul_ue)
                     uci.UE_id = ul_ue.id
+                    uci.header = ul_ue.id
                     uci.SR = 1
                     uci.fill_payload()
-                    uplink_channel(sock = send_sock, msg = uci.payload)
+                    print(uci.UE_id)
+                    # uplink_channel(sock = send_sock, msg = uci.payload)
                 else:
                     break
 
             end_msg = MSG()
             end_msg.header = HDR_END
             end_msg.fill_payload()
-            uplink_channel(sock = send_sock, msg = end_msg.payload)
+            # uplink_channel(sock = send_sock, msg = end_msg.payload)
             send_UCI = False    
 
         # send UL data
         if send_Data:
-            print(len(UL_UE_List))
             init_msg = INIT()
             init_msg.header = HDR_INIT
             init_msg.fill_payload()
-            uplink_channel(sock = send_sock, msg = init_msg.payload)
+            # uplink_channel(sock = send_sock, msg = init_msg.payload)
 
             if len(UL_UE_List) > 0:
+                dci0 : DCI_0_0
+                for dci0 in DCI0_List:
+                    for ul_ue in UL_UE_List:
+                        if dci0.UE_id == ul_ue.id:
+                            
+                            ul_ue.start_rb = dci0.start_rb
+                            ul_ue.freq_len = dci0.freq_len
+                            ul_ue.contention = dci0.contention
+                            if ul_ue.contention:
+                                ul_ue.start_rb = dci0.start_rb + random.randrange(dci0.contention_size - 1)
+
+                            ul_msg : UL_Data = UL_Data()
+                            ul_msg.UE_id = ul_ue.id
+                            ul_msg.payload_size = ul_ue.bsr
+                            ul_msg.bsr = ul_ue.bsr
+                            ul_msg.start_rb = ul_ue.start_rb
+                            ul_msg.freq_len = ul_ue.freq_len
+                            ul_msg.fill_payload()
+                            # uplink_channel(sock = send_sock, msg = ul_msg.payload)
+
+
                 for ul_ue in UL_UE_List:
-                    ul_msg : UL_Data = UL_Data()
-                    ul_msg.UE_id = ul_ue.id
-                    ul_msg.payload_size = ul_ue.bsr
-                    ul_msg.bsr = ul_ue.bsr
-                    ul_msg.fill_payload()
-                    uplink_channel(sock = send_sock, msg = ul_msg.payload)
+                    dci : DCI_0_0
+                    for dci in DCI0_List:
+                        if ul_ue.id == dci.UE_id:
+                            pass
+
+                    if ul_ue.transmission_time == system_frame * system_spf + system_slot:
+                        ul_msg : UL_Data = UL_Data()
+                        ul_msg.UE_id = ul_ue.id
+                        ul_msg.payload_size = ul_ue.bsr
+                        ul_msg.bsr = ul_ue.bsr
+                        ul_msg.start_rb = ul_ue.start_rb
+                        ul_msg.freq_len = ul_ue.freq_len
+                        ul_msg.fill_payload()
+                        # uplink_channel(sock = send_sock, msg = ul_msg.payload)
 
             end_msg = MSG()
             end_msg.header = HDR_END
             end_msg.fill_payload()
-            uplink_channel(sock = send_sock, msg = end_msg.payload)
+            # uplink_channel(sock = send_sock, msg = end_msg.payload)
 
             send_Data = False 
 
