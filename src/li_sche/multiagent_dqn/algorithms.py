@@ -138,10 +138,10 @@ class Algorithms():
             action = Schedule_Result()    
             
             # Update the queue
-            for i in range(len(ul_queue)):                
-                for i in range(len(ul_queue)):
-                    ul_queue[i].rdb -= 1
-                    ul_queue[i].queuing_delay += 1
+            # for i in range(len(ul_queue)):                
+            #     for i in range(len(ul_queue)):
+            #         ul_queue[i].rdb -= 1
+            #         ul_queue[i].queuing_delay += 1
             
             for i in range(len(ul_req)):
                 ul_queue.append(ul_req.popleft())

@@ -44,5 +44,8 @@ class UE:
         # ----[   Perform Contention Parameter   ]---- #
         # ----[==================================]---- #
         self.rb_id = 0                  # In order to perform contention
+        self.send_cnt = 1               # To calculate the average queuing delay
+        self.fail_cnt = 0               # To calculate the fail count
+        self.suc_cnt = 0                # To calculate the successful cound
 
 
