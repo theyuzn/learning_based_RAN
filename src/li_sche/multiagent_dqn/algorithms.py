@@ -122,7 +122,6 @@ class Algorithms():
 
         # To initial the state
         state_tuple, reward, done = self.env.init_RAN_system()
-        ul_req = list()
         ul_queue = deque([], maxlen = 65535) # Max number of the UE
         cumulative_reward = reward
         
@@ -145,7 +144,9 @@ class Algorithms():
             
             for i in range(len(ul_req)):
                 ul_queue.append(ul_req.popleft())
-                                
+
+            print(f"len == {len(ul_queue)}")
+         
             # Schedule the DCI0 and UL Data sequentially
             dci0, pusch_result = self.schedule_pusch(frame = frame, slot = slot, ul_queue = ul_queue) 
 

@@ -134,9 +134,10 @@ class RAN_system(RAN):
 
     def decode_json(self, dct):
         self.i += 1
+        print(math.ceil(dct['sizebyte']/self.tbs_per_RB))
         return  UE(
                     id              = self.i, 
-                    bsr             = math.ceil(dct['sizebyte']/848),
+                    bsr             = math.ceil(dct['sizebyte']/self.tbs_per_RB),
                     rdb             = dct['delayms']*math.pow(2, 1),
                     )
 
@@ -275,10 +276,8 @@ class RAN_system(RAN):
         match current_slot_info:
             case 'D':
                 DCI0 = deque(action.DCCH.dci0, maxlen = 65535)
-                dci_bytes_payload : bytes
+                print(f"{len(DCI0)} == {action.USCH.nrof_UE} == {len(self.UL_Flow_UE)}???")
                 for dci_bytes_payload in DCI0:
-                    dci_bytes_payload = int.from_bytes(dci_bytes_payload, "big")
-
                     msg = MSG()
                     msg.payload = dci_bytes_payload
                     header = msg.decode_header()
@@ -297,6 +296,8 @@ class RAN_system(RAN):
                             if dci0_0.contention:
                                 self.UL_Flow_UE[i].contention = True
                                 self.UL_Flow_UE[i].start_rb = dci0_0.start_rb + random.randrange(dci0_0.contention_size - 1)
+                            
+                            break
 
                 self.USCH_ra_queue.append(action.USCH)
 
@@ -319,13 +320,14 @@ class RAN_system(RAN):
                     if nrof_UE > 0:
                         contention_ue = deque([], maxlen = 65535)
                         queuing_ue = deque([], maxlen = 65535)
+
                         for i in range(len(self.UL_Flow_UE)):
                             q_ue : UE = self.UL_Flow_UE.popleft()
                             if q_ue.transmission_time == (self.frame * self.spf) + self.slot:
                                 contention_ue.append(q_ue)
                             else:
                                 q_ue.queuing_delay += self.pattern_p
-                                queuing_ue.append()
+                                queuing_ue.append(q_ue)
 
                         reward , suc_ue, fail_ue = self.contenion(nrof_UE=nrof_UE, cumulated_rb=cumulated_rb, ul_data=contention_ue)
 
