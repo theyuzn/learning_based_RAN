@@ -70,7 +70,7 @@ This agent is to decide the number of shared RB
     otherwise, the UE will be arranged to perform contention in shared resources.
 '''
 class Agent():
-    def __init__(self, args: argparse.Namespace, send_sock : sctp.sctpsocket_tcp, recv_sock : sctp.sctpsocket_tcp):
+    def __init__(self, args: argparse.Namespace):
         self.args = args
         self.seed: int = args.seed
         self.action_repeat: int = args.repeat
@@ -87,7 +87,7 @@ class Agent():
         self.epsilon = EPSILON_START
 
         # Environment
-        self.env = RAN_system(args=args, send_sock = send_sock, recv_sock = recv_sock)
+        self.env = RAN_system(args=args)
         self.step = 0
 
         # DQN Model

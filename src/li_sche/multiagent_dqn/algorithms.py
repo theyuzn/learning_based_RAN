@@ -21,10 +21,10 @@ from .envs.msg import *
 from .envs.ue import UE 
 
 class Algorithms():
-    def __init__(self, args: argparse.Namespace, send_sock : sctp.sctpsocket_tcp, recv_sock : sctp.sctpsocket_tcp):
+    def __init__(self, args: argparse.Namespace):
         # Agent
-        self.agent = Agent(args = args, send_sock = send_sock, recv_sock = recv_sock)
-        self.env = RAN_system(args = args, send_sock = send_sock, recv_sock = recv_sock)
+        self.agent = Agent(args = args)
+        self.env = RAN_system(args = args)
         self.pusch_result_transition = namedtuple('PUSCH_RESULT', ('frame', 'slot', 'nrof_UE', 'cumulated_rb'))
 
 
@@ -60,7 +60,10 @@ class Algorithms():
                 contention_UE.append(ul_ue)
             
             if schedule_size + contention_size >= self.env.nrofRB:
-                ul_queue.appendleft(ul_ue)
+                if ul_ue.contention:
+                    ul_queue.appendleft(contention_UE.pop())
+                else:
+                    ul_queue.appendleft(scheduled_UE.pop())
                 break
         
 
@@ -89,7 +92,6 @@ class Algorithms():
             
             dci = DCI_0_0()
             dci.header = ue.id
-            print(f"{dci.header} in C")
             dci.UE_id = ue.id
             dci.start_rb = start_rb
             dci.freq_len = ue.freq_len
@@ -134,18 +136,14 @@ class Algorithms():
             frame = state_tuple.frame
             slot = state_tuple.slot
             ul_req = deque(state_tuple.ul_req, maxlen = 65535)
+            print(f"===> [frame : {frame}]\t[slot : {slot}]\t{len(ul_req)}\t{len(ul_queue)}\t<===")
+
+            
             action = Schedule_Result()    
-            
-            # Update the queue
-            # for i in range(len(ul_queue)):                
-            #     for i in range(len(ul_queue)):
-            #         ul_queue[i].rdb -= 1
-            #         ul_queue[i].queuing_delay += 1
-            
-            for i in range(len(ul_req)):
+            l = len(ul_req)
+            for i in range(l):
                 ul_queue.append(ul_req.popleft())
 
-            print(f"len == {len(ul_queue)}")
          
             # Schedule the DCI0 and UL Data sequentially
             dci0, pusch_result = self.schedule_pusch(frame = frame, slot = slot, ul_queue = ul_queue) 

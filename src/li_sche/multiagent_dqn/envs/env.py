@@ -39,6 +39,7 @@ MAX_UPLINK_GRANT    = 16
 MAX_GROUP           = 4
 PRE_SCHE_SLOT       = 6
 SIZE_PER_RB         = 400
+LEGACY_CONSTANT     = 120
 
 class RAN:
     def __init__(self, 
@@ -114,13 +115,11 @@ class RAN_system(RAN):
     6. Cooperative multi-agent in the both side (UE and gNB)
     '''
 
-    def __init__(self, args : argparse.Namespace, send_sock : sctp.sctpsocket_tcp, recv_sock : sctp.sctpsocket_tcp):
+    def __init__(self, args : argparse.Namespace):
         super(RAN_system, self).__init__(BW = args.bw,
                                         numerology = args.mu,
                                         nrofRB = args.rb)
         self.State_Transition = namedtuple('State_Tuple', ('frame', 'slot', 'ul_req'))
-        self.recv_sock = recv_sock
-        self.send_sock = send_sock
         self.frame = 0
         self.slot = 0
         self.args = args
@@ -134,10 +133,9 @@ class RAN_system(RAN):
 
     def decode_json(self, dct):
         self.i += 1
-        print(math.ceil(dct['sizebyte']/self.tbs_per_RB))
         return  UE(
                     id              = self.i, 
-                    bsr             = math.ceil(dct['sizebyte']/self.tbs_per_RB),
+                    bsr             = 1, # math.ceil(dct['sizebyte']/self.tbs_per_RB),
                     rdb             = dct['delayms']*math.pow(2, 1),
                     )
 
@@ -164,105 +162,35 @@ class RAN_system(RAN):
 
 
     def contenion(self, nrof_UE = 0, cumulated_rb = 0, ul_data = deque([], maxlen = 65535)):
-        print(f"{nrof_UE} == {len(ul_data)} ??")
-        ### The highest level parameterm
-        ul_uelist = ul_data
+        reward = 0
+        total_rb_list = [list()]*self.nrofRB
 
-        ####### !~ { The group_id is 0 ~ MAX_GROUP-1 } ~! ##########
-        ## Arrange the grouping map which store the every UE which is allocated to the group
-        ## group_map                : { group_id : [ue, ue, ue, ue, ...], ...} 
-        group_map = dict()
+        len_ue = len(ul_data)
+        for _ in range(len_ue):
+            ue : UE = ul_data.popleft()
+            
+            for j in range(ue.freq_len):
+                total_rb_list[ue.start_rb + j].append(ue)
 
-        ## To store the number of collision in each group
-        ## collision_number_map    : { group_id : number_of_collision, ...}
-        collision_number_map = dict() 
-
-        ## To store the number of success in each group
-        ## collision_number_map    : { group_id : number_of_success, ...}
-        success_number_map = dict()
-
-        ## To store the total (expected) uplink transmission RBs
-        ## expect_data_map          : { group_id : nrofRB, ...}
-        expect_data_map = dict()
-
-        ## To store the successful uplink transmission data size
-        ## success_data_map         : { group_id : nrofRB, ...}
-        success_data_map = dict()
-
-        for i in range(MAX_GROUP):
-            group_map[i]            = []
-            collision_number_map[i] = 0
-            success_number_map[i]   = 0
-            expect_data_map[i]      = 0
-            success_data_map[i]     = 0
-
-        ## Store each ue into map
-        for ue in ul_uelist:
-            group_id = ue.group
-            if group_id in group_map:
-                group_map[group_id].append(ue)
+        succ_list = list()
+        fail_list = list()
+        succ_rb = 0
+        fail_rb = 0
+        contention_ue_list : list
+        for contention_ue_list in total_rb_list:
+            if len(contention_ue_list) == 0:
+                continue
+            elif len(contention_ue_list) == 1:
+                succ_list.append(contention_ue_list.pop())
+                succ_rb += 1
             else:
-                group_map[group_id] = [ue]
+                for fail_ue in contention_ue_list:
+                    fail_list.append(fail_ue)
+                    fail_rb += 1
         
-        ## In each group, the UE will randomly select a RB to transmit information
-        for group_id in group_map:
-            collision_number_map[group_id] = 0
-            success_number_map[group_id] = 0
-            expect_data_map[group_id] = 0
-            success_data_map[group_id] = 0
-            
-            group = group_map[group_id]
-            # Calculate the total aviavlible RBs in one group
-            total_RB = 0
-            for i in range(len(group)):
-                total_RB += group[i].nrofRB
-            expect_data_map[group_id] = total_RB * SIZE_PER_RB
+        reward = succ_rb - fail_rb - LEGACY_CONSTANT        
 
-            # Each UE ramdonly select
-            for i in range(len(group)):
-                if group_id == 0: # The scheduled UE has no need to contention
-                    group[i].set_RB_ID(i + 1)
-                else:
-                    group[i].set_RB_ID(random.randrange(total_RB) + 1)
-            
-            # Perform contention in every group
-            # rb_map : {rb_id : [ue, ue, ...], ...}
-            rb_map = dict()
-            for ue in group:
-                rb_id = ue.rb_id
-                if rb_id in rb_map:
-                    rb_map[rb_id].append(ue)
-                else:
-                    rb_map[rb_id] = [ue]
-
-            # To update the collision and success map
-            # update the self.ul_uelist if the ul_ue success to transmit the data
-            for rb_id in rb_map:
-
-                # Contention failed
-                if len(rb_map[rb_id]) > 1:
-                    collision_number_map[group_id] += len(rb_map[rb_id])
-
-                # Contention resolution
-                else:
-                    success_number_map[group_id] += len(rb_map[rb_id])
-                    ue_id = rb_map[rb_id][0].id
-                    size = rb_map[rb_id][0].nrofRB * SIZE_PER_RB
-                    for i in range(len(self.ul_uelist)):                        
-                        if ue_id == self.ul_uelist[i].id:
-                            success_data_map[group_id] += size
-                            self.ul_uelist[i].decay_size(size)
-                            
-
-        ## Out of the group loop
-        ## Calculate the reward
-        reward = self._reward(slot_information = slot_info, \
-                                collision_number_map = collision_number_map, \
-                                    success_number_map=success_number_map, \
-                                        expect_data_map=expect_data_map, \
-                                            success_data_map=success_data_map)
-
-        return reward
+        return reward, succ_list, fail_list
 
     
     def step(self, action : Schedule_Result):
@@ -276,7 +204,6 @@ class RAN_system(RAN):
         match current_slot_info:
             case 'D':
                 DCI0 = deque(action.DCCH.dci0, maxlen = 65535)
-                print(f"{len(DCI0)} == {action.USCH.nrof_UE} == {len(self.UL_Flow_UE)}???")
                 for dci_bytes_payload in DCI0:
                     msg = MSG()
                     msg.payload = dci_bytes_payload
@@ -310,55 +237,55 @@ class RAN_system(RAN):
                         ul_req.append(ul_ue)
                 
             case 'U':
-                USCH_ra = self.USCH_ra_queue.popleft()
-                if USCH_ra.frame != self.frame or USCH_ra.slot != self.slot:
-                    reward = -1
-                else:
-                    nrof_UE = USCH_ra.nrof_UE
-                    cumulated_rb = USCH_ra.cumulatied_rb
+                if len(self.USCH_ra_queue) > 0:
 
-                    if nrof_UE > 0:
-                        contention_ue = deque([], maxlen = 65535)
-                        queuing_ue = deque([], maxlen = 65535)
+                    USCH_ra = self.USCH_ra_queue.popleft()
+                    if USCH_ra.frame != self.frame or USCH_ra.slot != self.slot:
+                        reward = -1
+                    else:
+                        nrof_UE = USCH_ra.nrof_UE
+                        cumulated_rb = USCH_ra.cumulatied_rb
 
-                        for i in range(len(self.UL_Flow_UE)):
-                            q_ue : UE = self.UL_Flow_UE.popleft()
-                            if q_ue.transmission_time == (self.frame * self.spf) + self.slot:
-                                contention_ue.append(q_ue)
-                            else:
-                                q_ue.queuing_delay += self.pattern_p
-                                queuing_ue.append(q_ue)
+                        if nrof_UE > 0:
+                            print("Perform contention")
+                            contention_ue = deque([], maxlen = 65535)
+                            queuing_ue = deque([], maxlen = 65535)
 
-                        reward , suc_ue, fail_ue = self.contenion(nrof_UE=nrof_UE, cumulated_rb=cumulated_rb, ul_data=contention_ue)
+                            for i in range(len(self.UL_Flow_UE)):
+                                q_ue : UE = self.UL_Flow_UE.popleft()
+                                if q_ue.transmission_time == (self.frame * self.spf) + self.slot:
+                                    contention_ue.append(q_ue)
+                                else:
+                                    q_ue.queuing_delay += self.pattern_p
+                                    queuing_ue.append(q_ue)
 
-                        ue : UE
-                        self.UL_Flow_UE = queuing_ue.copy()
-                        for ue in suc_ue:
-                            ue.send_cnt += 1
-                            ue.suc_cnt += 1
-                            ul_req.append(ue)
-                        for ue in fail_ue:
-                            ue.queuing_delay += self.pattern_p
-                            ue.fail_cnt += 1
-                            self.UL_Flow_UE.append(ue)
-                        
+                            reward , suc_ue, fail_ue = self.contenion(nrof_UE=nrof_UE, cumulated_rb=cumulated_rb, ul_data=contention_ue)
+
+                            ue : UE
+                            self.UL_Flow_UE = queuing_ue.copy()
+                            for ue in suc_ue:
+                                ue.send_cnt += 1
+                                ue.suc_cnt += 1
+                                ul_req.append(ue)
+                            for ue in fail_ue:
+                                ue.queuing_delay += self.pattern_p
+                                ue.fail_cnt += 1
+                                self.UL_Flow_UE.append(ue)
+                            
                 
-
+        
         # Update the slot
         self.slot += 1
         if self.slot >= self.spf:
             self.slot = 0
             self.frame += 1
-
+            
         if self.frame >= SIMULATION_FRAME:
+            print(self.done)
             self.done = True
         
         # Inform the UE entity
         if self.done:
-            # end_msg = MSG()
-            # end_msg.header = HDR_END
-            # end_msg.fill_payload()
-            # self.downlink_channel(end_msg.payload)
             next_state_tuple = self.State_Transition(frame = self.frame, slot = self.slot, ul_req = [])
 
         next_state_tuple = self.State_Transition(frame = self.frame, slot = self.slot, ul_req = ul_req)

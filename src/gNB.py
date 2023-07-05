@@ -21,7 +21,7 @@ parser = argparse.ArgumentParser(description='Configuration')
 ########################################## RAN parameter ##########################################
 parser.add_argument('--bw', default=400, type=int,help='channel bandwidth in MHz')
 parser.add_argument('--mu', default=3,   type=int,help='the numerology')
-parser.add_argument('--rb', default=264,type=int,help='number of available RB')
+parser.add_argument('--rb', default=248,type=int,help='number of available RB')
 
 ########################################## DQN parameter ##########################################
 parser.add_argument('--model', default='dqn', type=str, help='forcefully set step')
@@ -56,10 +56,14 @@ MAX_BUFFER_SIZE = 65535
 
 
 from collections import deque
+
+def test(q = deque([], maxlen=65535)):
+    for i in range(len(q)):
+        q[i] = 100 + i*2
 def main(parser: argparse.Namespace):
 
     # Test Block # 
-   
+
     ##############
     '''
     To emulate the Rx and Tx, I create two socket
@@ -67,41 +71,9 @@ def main(parser: argparse.Namespace):
     send_sock is responsible for the Tx antenna
     The recv_sock will ocuupies one thread to receive the msg.
     '''
-    recv_sock : sctp.sctpsocket_tcp = 0
-    send_sock : sctp.sctpsocket_tcp = 0
-
-    # Create the server socket, to bind and wait for connections
-    # For Rx antenna
-    server_recv_sock = sctp.sctpsocket(socket.AF_INET, socket.SOCK_STREAM, None)
-    server_recv_sock.initparams.max_instreams = 1
-    server_recv_sock.initparams.num_ostreams = 1
-    server_recv_sock.bindx([(SERVER_HOST, RECV_PORT)])
-    server_recv_sock.listen(5)
-    server_recv_sock.events.data_io = 1
-    server_recv_sock.events.clear()
-    print("Waiting for UE's Tx conntenion")
-    recv_sock, _ = server_recv_sock.accept()
-    print(f"recv_sock is connected.\nUplink channel is established.")
-    print("=========================================")
-
-
-    # For Tx antenna
-    server_send_sock = sctp.sctpsocket(socket.AF_INET, socket.SOCK_STREAM, None)
-    server_send_sock.initparams.max_instreams = 1
-    server_send_sock.initparams.num_ostreams = 1
-    server_send_sock.bindx([(SERVER_HOST, SEND_PORT)])
-    server_send_sock.listen(5)
-    server_send_sock.events.data_io = 1
-    server_send_sock.events.clear()
-
-    print("Waiting for UE's Rx conntenion")
-    send_sock, _ = server_send_sock.accept()
-    print(f"send_sock is connected.\nDownlink channel is established.")
-    print("=========================================")
-
-    
+   
     # Initial the system
-    alg = Algorithms(args = parser, send_sock = send_sock, recv_sock = recv_sock)
+    alg = Algorithms(args = parser)
  
     # Running the system
     scheduler = parser.scheduler
@@ -127,10 +99,6 @@ def main(parser: argparse.Namespace):
             return
 
     time.sleep(1)
-    recv_sock.close()
-    send_sock.close()
-    server_recv_sock.close()
-    server_send_sock.close()
     print("Process is done, BYE!!!")
        
 if __name__ == '__main__':
