@@ -3,7 +3,7 @@ class UE:
                  id = 0,            
                 #  total_data = 0, 
                 bsr = 0,   
-                 rdb = 0,   
+                rdb = 0,   
                 #  service = "VoNR",       
                 #  nr5QI = "0",        
                 #  errorrate = "0",     
@@ -16,6 +16,7 @@ class UE:
         self.id = id                      # UE ID (can be seemed as RNTI)
         # self.total_data = total_data    # The total size of data
         self.bsr = bsr                    # Buffer Status Report
+        self.init_rdb = rdb               # The re-initial R-PDB
         self.rdb = rdb                    # Remaining delay budget
         # self.service = service          # String [VoNR, Video, Live Stream]
         # self.nr5QI = nr5QI              # 5QI

@@ -46,8 +46,8 @@ class Algorithms():
         # To cound the size of each scheme
         while len(ul_queue) > 0 :
             ul_ue : UE = ul_queue.popleft()
-            ul_ue.freq_len = ul_ue.bsr     
-
+            ul_ue.freq_len = ul_ue.bsr  
+            
             if ul_ue.rdb <= 5 * self.env.pattern_p:
                 # Schedule
                 ul_ue.contention = False
@@ -121,52 +121,51 @@ class Algorithms():
 
     def FCFS(self):
         print("\n\n[ This is the First-Come-First-Serve ]\n\n")
+        count = 0
 
-        # To initial the state
-        state_tuple, reward, done = self.env.init_RAN_system()
-        ul_queue = deque([], maxlen = 65535) # Max number of the UE
-        cumulative_reward = reward
-        
-        while not done:
-            '''
-            This idea is from OAI
-            1.) Schedule PUSCH and DCI0
-            2.) Schedule DCI1
-            '''
-            frame = state_tuple.frame
-            slot = state_tuple.slot
-            ul_req = deque(state_tuple.ul_req, maxlen = 65535)
-            print(f"===> [frame : {frame}]\t[slot : {slot}]\t{len(ul_req)}\t{len(ul_queue)}\t<===")
-
+        while count < 10000 :
+            # To initial the state
+            state_tuple, reward, done = self.env.init_RAN_system()
+            ul_queue = deque([], maxlen = 65535) # Max number of the UE
+            cumulative_reward = reward
             
-            action = Schedule_Result()    
-            l = len(ul_req)
-            for i in range(l):
-                ul_queue.append(ul_req.popleft())
+            while not done:
+                # initial
+                action = Schedule_Result()  
+                ul_req = deque([], maxlen = 65535)
 
-         
-            # Schedule the DCI0 and UL Data sequentially
-            dci0, pusch_result = self.schedule_pusch(frame = frame, slot = slot, ul_queue = ul_queue) 
+                # Update the system parameters
+                frame = state_tuple.frame
+                slot = state_tuple.slot
+                ul_req = deque(state_tuple.ul_req, maxlen = 65535)
 
-            # Schedule the DCI1 for informing the UCCH
-            dci1 = self.schedule_downlink(frame = frame, slot = slot)
-         
-
-            action.DCCH = action.DCI_Transition(dci0 = dci0, dci1 = dci1)
-            action.USCH = action.USCH_Transition(frame = pusch_result.frame, slot = pusch_result.slot, nrof_UE = pusch_result.nrof_UE, cumulatied_rb = pusch_result.cumulated_rb)
+                for ue in ul_queue:
+                    ue.rdb -= 1
+                
+                # Add request into queue
+                for ue in ul_req:
+                    ul_queue.append(ue)
+                ul_req.clear()
             
-            
-            state_tuple, reward, done = self.env.step(action)
-            cumulative_reward += reward
-            time.sleep(0.001)
+                # Schedule the DCI0 and UL Data sequentially
+                dci0, pusch_result = self.schedule_pusch(frame = frame, slot = slot, ul_queue = ul_queue) 
 
+                # Schedule the DCI1 for informing the UCCH
+                dci1 = self.schedule_downlink(frame = frame, slot = slot)
+            
+                action.DCCH = action.DCI_Transition(dci0 = dci0, dci1 = dci1)
+                action.USCH = action.USCH_Transition(frame = pusch_result.frame, slot = pusch_result.slot, nrof_UE = pusch_result.nrof_UE, cumulatied_rb = pusch_result.cumulated_rb)
+                
+                state_tuple, reward, done = self.env.step(action)
+                cumulative_reward += reward
+                time.sleep(0.001)
+            print(cumulative_reward)
             
     ###################################################################
 
 
     ############################# Train ###############################
     def train(self):
-        print("testestset")
         self.agent.train()
     ###################################################################
 

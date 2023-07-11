@@ -123,6 +123,7 @@ class RAN_system(RAN):
         self.frame = 0
         self.slot = 0
         self.args = args
+        self.filename = args.filename
         self.done = False
 
         self.UE_List = deque([], maxlen = 65535)
@@ -133,10 +134,11 @@ class RAN_system(RAN):
 
     def decode_json(self, dct):
         self.i += 1
+        print(dct['delayms']*math.pow(2, 5))
         return  UE(
                     id              = self.i, 
-                    bsr             = 1, # math.ceil(dct['sizebyte']/self.tbs_per_RB),
-                    rdb             = dct['delayms']*math.pow(2, 1),
+                    bsr             = 2, # math.ceil(dct['sizebyte']/self.tbs_per_RB),
+                    rdb             = dct['delayms']*math.pow(2, 5),
                     )
 
     def init_RAN_system(self):
@@ -147,7 +149,7 @@ class RAN_system(RAN):
         reward = 0
 
          # Load the UEs
-        path = f"{os.path.dirname(__file__)}/../../../data/uedata.json"
+        path = f"{os.path.dirname(__file__)}/../../../data/{self.filename}"
         with open(path, 'r') as ue_file:
             self.UE_List = deque(json.load(ue_file,object_hook=self.decode_json), maxlen = 65535)
         state_tuple = self.State_Transition(frame = self.frame, slot = self.slot, ul_req = [])
@@ -162,74 +164,89 @@ class RAN_system(RAN):
 
 
     def contenion(self, nrof_UE = 0, cumulated_rb = 0, ul_data = deque([], maxlen = 65535)):
-        reward = 0
-        total_rb_list = [list()]*self.nrofRB
+        print("=================================================")
+        print("\t\t[ Perform contention ]\t\t")
+        print("=================================================")
 
-        len_ue = len(ul_data)
-        for _ in range(len_ue):
-            ue : UE = ul_data.popleft()
-            
+        reward = 0
+        total_rb_map = dict()
+        
+        ue : UE
+        for ue in ul_data:            
             for j in range(ue.freq_len):
-                total_rb_list[ue.start_rb + j].append(ue)
+                if ue.start_rb + j in total_rb_map:
+                    total_rb_map[ue.start_rb + j].append(ue)
+                else:
+                    total_rb_map[ue.start_rb + j] = [ue]        
 
         succ_list = list()
         fail_list = list()
         succ_rb = 0
         fail_rb = 0
-        contention_ue_list : list
-        for contention_ue_list in total_rb_list:
-            if len(contention_ue_list) == 0:
+        for occupied_rb in total_rb_map:
+            if len(total_rb_map[occupied_rb]) == 0:
                 continue
-            elif len(contention_ue_list) == 1:
-                succ_list.append(contention_ue_list.pop())
+            elif len(total_rb_map[occupied_rb]) == 1:
+                succ_list.append(total_rb_map[occupied_rb][0])
                 succ_rb += 1
             else:
-                for fail_ue in contention_ue_list:
+                for fail_ue in total_rb_map[occupied_rb]:
                     fail_list.append(fail_ue)
                     fail_rb += 1
         
-        reward = succ_rb - fail_rb - LEGACY_CONSTANT        
-
+        reward = succ_rb - fail_rb #- LEGACY_CONSTANT     
         return reward, succ_list, fail_list
 
     
     def step(self, action : Schedule_Result):
         # Initial
         ul_req = deque([], maxlen = 65535)
-
-        # Tx / Rx 
-        current_slot_info = self.get_slot_info(self.frame, self.slot)
-
         reward = 0
-        match current_slot_info:
-            case 'D':
-                DCI0 = deque(action.DCCH.dci0, maxlen = 65535)
-                for dci_bytes_payload in DCI0:
-                    msg = MSG()
-                    msg.payload = dci_bytes_payload
-                    header = msg.decode_header()
 
-                    dci0_0 : DCI_0_0 = DCI_0_0()
-                    dci0_0.header = header
-                    dci0_0.payload = msg.payload
-                    dci0_0.decode_msg()
+        # To deal with the schedule result
+        slot_info = self.get_slot_info(self.frame, self.slot)
 
-                    for i in range(len(self.UL_Flow_UE)):
-                        if dci0_0.UE_id == self.UL_Flow_UE[i].id:
-                            self.UL_Flow_UE[i].start_rb = dci0_0.start_rb
-                            self.UL_Flow_UE[i].freq_len = dci0_0.freq_len
-                            self.UL_Flow_UE[i].transmission_time = (self.frame * self.spf) + self.slot + self.k2
+        if slot_info == 'D':
+            print(f"[\tEnvironment\t]\t[ {self.frame} : {self.slot} ]\t{slot_info}")
+            print(f"{action.USCH.frame}:{action.USCH.slot}  {action.USCH.nrof_UE}")
+            DCI0 = deque(action.DCCH.dci0, maxlen = 65535)
+            for dci_bytes_payload in DCI0:
+                msg = MSG()
+                msg.payload = dci_bytes_payload
+                header = msg.decode_header()
 
-                            if dci0_0.contention:
-                                self.UL_Flow_UE[i].contention = True
-                                self.UL_Flow_UE[i].start_rb = dci0_0.start_rb + random.randrange(dci0_0.contention_size - 1)
-                            
-                            break
+                dci0_0 : DCI_0_0 = DCI_0_0()
+                dci0_0.header = header
+                dci0_0.payload = msg.payload
+                dci0_0.decode_msg()
 
-                self.USCH_ra_queue.append(action.USCH)
+                for i in range(len(self.UL_Flow_UE)):
+                    if dci0_0.UE_id == self.UL_Flow_UE[i].id:
+                        self.UL_Flow_UE[i].start_rb = dci0_0.start_rb
+                        self.UL_Flow_UE[i].freq_len = dci0_0.freq_len
+                        self.UL_Flow_UE[i].transmission_time = (self.frame * self.spf) + self.slot + self.k2
 
+                        if dci0_0.contention:
+                            self.UL_Flow_UE[i].contention = True
+                            self.UL_Flow_UE[i].start_rb = dci0_0.start_rb + random.randrange(dci0_0.contention_size - 1)                        
+                        break
 
+            self.USCH_ra_queue.append(action.USCH)
+            # print(self.USCH_ra_queue)
+            reward = 0
+
+        # Update the slot
+        self.slot += 1
+        if self.slot >= self.spf:
+            self.slot = 0
+            self.frame += 1
+        
+        # Deal with the UL request and UL data
+        slot_info = self.get_slot_info(self.frame, self.slot)
+
+        match slot_info:
             case 'S':
+                print(f"[\tEnvironment\t]\t[ {self.frame} : {self.slot} ]\t{slot_info}")
                 for i in range(16):
                     if len(self.UE_List) > 0:
                         ul_ue = self.UE_List.popleft()
@@ -237,6 +254,7 @@ class RAN_system(RAN):
                         ul_req.append(ul_ue)
                 
             case 'U':
+                print(f"[\tEnvironment\t]\t[ {self.frame} : {self.slot} ]\t{slot_info}")
                 if len(self.USCH_ra_queue) > 0:
 
                     USCH_ra = self.USCH_ra_queue.popleft()
@@ -247,46 +265,32 @@ class RAN_system(RAN):
                         cumulated_rb = USCH_ra.cumulatied_rb
 
                         if nrof_UE > 0:
-                            print("Perform contention")
                             contention_ue = deque([], maxlen = 65535)
-                            queuing_ue = deque([], maxlen = 65535)
-
-                            for i in range(len(self.UL_Flow_UE)):
-                                q_ue : UE = self.UL_Flow_UE.popleft()
+                            
+                            q_ue : UE
+                            for q_ue in self.UL_Flow_UE:
                                 if q_ue.transmission_time == (self.frame * self.spf) + self.slot:
                                     contention_ue.append(q_ue)
-                                else:
-                                    q_ue.queuing_delay += self.pattern_p
-                                    queuing_ue.append(q_ue)
-
+                                
                             reward , suc_ue, fail_ue = self.contenion(nrof_UE=nrof_UE, cumulated_rb=cumulated_rb, ul_data=contention_ue)
 
                             ue : UE
-                            self.UL_Flow_UE = queuing_ue.copy()
                             for ue in suc_ue:
                                 ue.send_cnt += 1
                                 ue.suc_cnt += 1
+                                ue.rdb = ue.init_rdb
                                 ul_req.append(ue)
+
                             for ue in fail_ue:
                                 ue.queuing_delay += self.pattern_p
                                 ue.fail_cnt += 1
-                                self.UL_Flow_UE.append(ue)
+                                ue.rdb -= 1
+                                ue.queuing_delay += 1
+                                ul_req.append(ue)
                             
-                
-        
-        # Update the slot
-        self.slot += 1
-        if self.slot >= self.spf:
-            self.slot = 0
-            self.frame += 1
-            
-        if self.frame >= SIMULATION_FRAME:
-            print(self.done)
+        if self.frame > SIMULATION_FRAME:
+            print("This episode is done !!!")
             self.done = True
-        
-        # Inform the UE entity
-        if self.done:
-            next_state_tuple = self.State_Transition(frame = self.frame, slot = self.slot, ul_req = [])
 
         next_state_tuple = self.State_Transition(frame = self.frame, slot = self.slot, ul_req = ul_req)
         return next_state_tuple, reward, self.done

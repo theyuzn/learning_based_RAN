@@ -42,6 +42,7 @@ parser.add_argument('--repeat', default = 4, type = int, help = 'The LSTM model'
 
 ########################################## Exp parameter ##########################################
 parser.add_argument('--scheduler', default="Li", help='To indicate the scheduler algorithm')
+parser.add_argument('--filename', default="uedata_100.json", help='To indicate the file name')
 
 ##########################################  Set default  ##########################################
 parser.set_defaults(test = False, scheduler = "Li")
