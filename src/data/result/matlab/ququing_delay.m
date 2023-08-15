@@ -15,7 +15,7 @@ b = bar(x,y, '');
 
 
 % set(gca,'XTick',{'5','10','20','30','40','60','80','120','160','240','320','480', '960', '1920'})
-legend('RAS FCFS','RAS DRL-LS','Traditional PF', 'Location', 'northwest', 'interpreter','latex','fontsize', 24, 'NumColumns', 3 );
+legend('FCFS','DRL-LS','PF', 'Location', 'northwest', 'interpreter','latex','fontsize', 24, 'NumColumns', 3 );
 xlabel('Scenario','interpreter','latex', 'fontsize', 24);
 ylabel('Average queuing delay (slot)', 'interpreter','latex','fontsize',24);
 set(gca,'FontSize',24);
